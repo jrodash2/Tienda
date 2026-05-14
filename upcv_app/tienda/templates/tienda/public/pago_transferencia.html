@@ -50,15 +50,23 @@
     </div>
   </div>
   <div class="col-lg-6">
-    <form class="card border-0 shadow-sm h-100" method="post" enctype="multipart/form-data">
+    <div class="card border-0 shadow-sm h-100">
       <div class="card-body">
-        {% csrf_token %}
         <h4 class="fw-bold mb-3">Subir comprobante ahora</h4>
-        <p class="text-muted">Adjunte el comprobante de transferencia. Aceptamos imagen o PDF.</p>
-        {{ form.as_p }}
-        <button class="btn btn-primary w-100">Enviar comprobante</button>
+        {% if puede_subir_comprobante %}
+          <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <p class="text-muted">Adjunte el comprobante de transferencia. Aceptamos imagen o PDF.</p>
+            {{ form.as_p }}
+            <button class="btn btn-primary w-100">Enviar comprobante</button>
+          </form>
+        {% elif pedido.estado_pago == 'confirmado' %}
+          <div class="alert alert-success mb-0">Su pago fue confirmado.</div>
+        {% else %}
+          <div class="alert alert-info mb-0">Ya recibimos su comprobante. Su pago está en revisión.</div>
+        {% endif %}
       </div>
-    </form>
+    </div>
   </div>
 </div>
 

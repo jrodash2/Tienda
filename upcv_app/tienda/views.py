@@ -13,9 +13,62 @@ from .forms import (
     CambiarEstadoPedidoForm, CategoriaProductoForm, CheckoutForm, ComprobanteTransferenciaForm,
     CuentaBancariaForm, MarcaProductoForm, ProductoForm, RechazarPagoForm,
 )
-from .models import CategoriaProducto, ClientePedido, CuentaBancaria, DetallePedido, MarcaProducto, Pedido, Producto
+from .models import CategoriaProducto, ClientePedido, CuentaBancaria, DetallePedido, ImagenProducto, MarcaProducto, Pedido, Producto
 
 ENVIO_DEFAULT = Decimal('0.00')
+
+ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
+MAX_IMAGE_SIZE = 5 * 1024 * 1024
+
+
+def _validar_imagen_producto(archivo):
+    extension = archivo.name.lower().rsplit('.', 1)
+    extension = f'.{extension[-1]}' if len(extension) > 1 else ''
+    if extension not in ALLOWED_IMAGE_EXTENSIONS:
+        return 'Solo se permiten imágenes JPG, JPEG, PNG o WEBP.'
+    if archivo.size > MAX_IMAGE_SIZE:
+        return 'Cada imagen debe pesar máximo 5 MB.'
+    return ''
+
+
+def _procesar_imagenes_producto(request, producto):
+    for archivo in request.FILES.getlist('imagenes'):
+        error = _validar_imagen_producto(archivo)
+        if error:
+            messages.warning(request, f'{archivo.name}: {error}')
+            continue
+        es_principal = not producto.imagenes.filter(activo=True, principal=True).exists() and not producto.imagen_principal
+        ImagenProducto.objects.create(
+            producto=producto,
+            imagen=archivo,
+            alt=producto.nombre,
+            orden=producto.imagenes.count(),
+            principal=es_principal,
+        )
+    principal_id = request.POST.get('imagen_principal_galeria')
+    if principal_id:
+        imagen = producto.imagenes.filter(pk=principal_id).first()
+        if imagen:
+            imagen.principal = True
+            imagen.activo = True
+            imagen.save()
+    for imagen in producto.imagenes.all():
+        alt = request.POST.get(f'imagen_alt_{imagen.pk}')
+        orden = request.POST.get(f'imagen_orden_{imagen.pk}')
+        activo = request.POST.get(f'imagen_activo_{imagen.pk}') == 'on'
+        changed = False
+        if alt is not None and imagen.alt != alt:
+            imagen.alt = alt
+            changed = True
+        if orden is not None and orden.isdigit() and imagen.orden != int(orden):
+            imagen.orden = int(orden)
+            changed = True
+        if imagen.activo != activo:
+            imagen.activo = activo
+            changed = True
+        if changed:
+            imagen.save()
+
 
 
 def tienda_inicio(request):
@@ -36,6 +89,7 @@ def catalogo_productos(request):
     precio_min = request.GET.get('precio_min')
     precio_max = request.GET.get('precio_max')
     orden = request.GET.get('orden', 'recientes')
+    disponibilidad = request.GET.get('disponibilidad')
     if q:
         productos = productos.filter(Q(nombre__icontains=q) | Q(descripcion_corta__icontains=q) | Q(descripcion_larga__icontains=q) | Q(codigo_sku__icontains=q))
     if categoria:
@@ -46,7 +100,13 @@ def catalogo_productos(request):
         productos = productos.filter(precio__gte=precio_min)
     if precio_max:
         productos = productos.filter(precio__lte=precio_max)
-    order_map = {'precio_menor': 'precio', 'precio_mayor': '-precio', 'destacados': '-destacado', 'recientes': '-fecha_creacion'}
+    if disponibilidad == 'disponible':
+        productos = productos.filter(stock__gt=0)
+    elif disponibilidad == 'agotado':
+        productos = productos.filter(stock=0)
+    if request.GET.get('ofertas'):
+        productos = productos.filter(precio_oferta__isnull=False)
+    order_map = {'precio_menor': 'precio', 'precio_mayor': '-precio', 'ofertas': '-precio_oferta', 'destacados': '-destacado', 'recientes': '-fecha_creacion'}
     productos = productos.order_by(order_map.get(orden, '-fecha_creacion'))
     paginator = Paginator(productos, 12)
     page_obj = paginator.get_page(request.GET.get('page'))
@@ -178,10 +238,13 @@ def _contexto_publico_pedido(pedido, form=None, contacto=''):
 def pago_transferencia(request, codigo_pedido):
     pedido = get_object_or_404(Pedido.objects.select_related('cliente').prefetch_related('detalles'), codigo_pedido=codigo_pedido)
     form = ComprobanteTransferenciaForm(request.POST or None, request.FILES or None, instance=pedido)
-    if request.method == 'POST' and form.is_valid():
-        pedido = _guardar_comprobante_transferencia(form)
-        messages.success(request, 'Comprobante recibido. El administrador revisará y confirmará su pago.')
-        return redirect('tienda:estado_pedido', codigo_pedido=pedido.codigo_pedido)
+    if request.method == 'POST':
+        if not _puede_subir_comprobante(pedido):
+            messages.warning(request, 'Este pedido ya tiene un comprobante en revisión o un pago confirmado.')
+        elif form.is_valid():
+            pedido = _guardar_comprobante_transferencia(form)
+            messages.success(request, 'Comprobante recibido. El administrador revisará y confirmará su pago.')
+            return redirect('tienda:estado_pedido', codigo_pedido=pedido.codigo_pedido)
     return render(request, 'tienda/public/pago_transferencia.html', _contexto_publico_pedido(pedido, form))
 
 
@@ -250,9 +313,10 @@ def admin_producto_form(request, pk=None):
     producto = get_object_or_404(Producto, pk=pk) if pk else None
     form = ProductoForm(request.POST or None, request.FILES or None, instance=producto)
     if request.method == 'POST' and form.is_valid():
-        form.save()
+        producto = form.save()
+        _procesar_imagenes_producto(request, producto)
         messages.success(request, 'Producto guardado correctamente.')
-        return redirect('tienda:admin_productos')
+        return redirect('tienda:admin_producto_editar', pk=producto.pk)
     return render(request, 'tienda/admin/productos/form.html', {'form': form, 'producto': producto})
 
 
@@ -271,6 +335,19 @@ def admin_producto_toggle(request, pk):
     producto.save(update_fields=['activo', 'fecha_actualizacion'])
     messages.success(request, 'Estado del producto actualizado.')
     return redirect('tienda:admin_productos')
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda')
+def admin_producto_imagen_eliminar(request, producto_id, imagen_id):
+    producto = get_object_or_404(Producto, pk=producto_id)
+    imagen = get_object_or_404(ImagenProducto, pk=imagen_id, producto=producto)
+    if request.method == 'POST':
+        imagen.activo = False
+        imagen.principal = False
+        imagen.save(update_fields=['activo', 'principal'])
+        messages.success(request, 'Imagen desactivada correctamente.')
+    return redirect('tienda:admin_producto_editar', pk=producto.pk)
 
 
 def _crud_list_form(request, model, form_class, template_list, template_form, redirect_name, pk=None):

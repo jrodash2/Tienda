@@ -21,6 +21,7 @@ urlpatterns = [
     path('admin/productos/<int:pk>/editar/', views.admin_producto_form, name='admin_producto_editar'),
     path('admin/productos/<int:pk>/detalle/', views.admin_producto_detalle, name='admin_producto_detalle'),
     path('admin/productos/<int:pk>/toggle/', views.admin_producto_toggle, name='admin_producto_toggle'),
+    path('admin/productos/<int:producto_id>/imagenes/<int:imagen_id>/eliminar/', views.admin_producto_imagen_eliminar, name='admin_producto_imagen_eliminar'),
     path('admin/categorias/', views.admin_categorias, name='admin_categorias'),
     path('admin/categorias/crear/', views.admin_categoria_form, name='admin_categoria_crear'),
     path('admin/categorias/<int:pk>/editar/', views.admin_categoria_form, name='admin_categoria_editar'),

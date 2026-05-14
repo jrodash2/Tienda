@@ -5,6 +5,7 @@ from .models import CategoriaProducto, MarcaProducto, Producto, ImagenProducto, 
 class ImagenProductoInline(admin.TabularInline):
     model = ImagenProducto
     extra = 1
+    fields = ('imagen', 'alt', 'orden', 'principal', 'activo')
 
 
 @admin.register(CategoriaProducto)
@@ -34,7 +35,8 @@ class ProductoAdmin(admin.ModelAdmin):
 
 @admin.register(ImagenProducto)
 class ImagenProductoAdmin(admin.ModelAdmin):
-    list_display = ('producto', 'alt', 'orden')
+    list_display = ('producto', 'alt', 'orden', 'principal', 'activo', 'fecha_creacion')
+    list_filter = ('principal', 'activo')
     search_fields = ('producto__nombre', 'alt')
 
 

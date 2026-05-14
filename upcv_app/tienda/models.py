@@ -81,12 +81,32 @@ class Producto(models.Model):
         super().save(*args, **kwargs)
 
     @property
+    def tiene_oferta(self):
+        return self.precio_oferta is not None and self.precio_oferta < self.precio
+
+    @property
     def precio_actual(self):
-        return self.precio_oferta if self.precio_oferta is not None else self.precio
+        return self.precio_oferta if self.tiene_oferta else self.precio
 
     @property
     def en_oferta(self):
-        return self.precio_oferta is not None and self.precio_oferta < self.precio
+        return self.tiene_oferta
+
+    @property
+    def porcentaje_descuento(self):
+        if self.tiene_oferta and self.precio:
+            return round(((self.precio - self.precio_oferta) / self.precio) * 100)
+        return 0
+
+    @property
+    def imagen_destacada(self):
+        principal = self.imagenes.filter(activo=True, principal=True).first()
+        if principal:
+            return principal.imagen
+        primera = self.imagenes.filter(activo=True).first()
+        if primera:
+            return primera.imagen
+        return self.imagen_principal
 
     @property
     def agotado(self):
@@ -100,14 +120,22 @@ class Producto(models.Model):
 class ImagenProducto(models.Model):
     producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='imagenes')
     imagen = models.ImageField(upload_to='tienda/productos/galeria/')
-    alt = models.CharField(max_length=180, blank=True)
+    alt = models.CharField(max_length=150, blank=True, null=True)
     orden = models.PositiveIntegerField(default=0)
+    principal = models.BooleanField(default=False)
+    activo = models.BooleanField(default=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['orden', 'id']
 
     def __str__(self):
         return self.alt or self.producto.nombre
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.principal:
+            ImagenProducto.objects.filter(producto=self.producto, principal=True).exclude(pk=self.pk).update(principal=False)
 
 
 class ClientePedido(models.Model):

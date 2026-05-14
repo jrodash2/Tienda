@@ -1,1 +1,84 @@
-{% extends 'tienda/admin/_base_admin_tienda.html' %}{% block tienda_admin_content %}<h3>{% if producto %}Editar{% else %}Crear{% endif %} producto</h3><form method="post" enctype="multipart/form-data" class="card card-body">{% csrf_token %}{{ form.as_p }}<button class="btn btn-primary">Guardar</button></form>{% endblock %}
+{% extends 'tienda/admin/_base_admin_tienda.html' %}
+{% block tienda_admin_content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h3 class="mb-1">{% if producto %}Editar{% else %}Crear{% endif %} producto</h3>
+    <p class="text-muted mb-0">Gestiona la información del producto y su galería de imágenes.</p>
+  </div>
+  <a class="btn btn-outline-secondary" href="{% url 'tienda:admin_productos' %}">Volver</a>
+</div>
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  <div class="row g-4">
+    <div class="col-xl-8">
+      <div class="card">
+        <div class="card-header"><h5 class="mb-0">Datos del producto</h5></div>
+        <div class="card-body">{{ form.as_p }}</div>
+      </div>
+    </div>
+    <div class="col-xl-4">
+      <div class="card mb-4">
+        <div class="card-header"><h5 class="mb-0">Galería de imágenes del producto</h5></div>
+        <div class="card-body">
+          <label class="form-label fw-semibold">Subir nuevas imágenes</label>
+          <input type="file" name="imagenes" class="form-control" multiple accept="image/*">
+          <small class="text-muted d-block mt-2">Formatos permitidos: JPG, JPEG, PNG y WEBP. Máximo 5 MB por imagen.</small>
+          {% if producto and producto.imagen_principal %}
+            <hr>
+            <p class="fw-semibold mb-2">Imagen principal actual</p>
+            <img src="{{ producto.imagen_principal.url }}" class="img-fluid rounded border" alt="{{ producto.nombre }}">
+          {% endif %}
+        </div>
+      </div>
+      <button class="btn btn-primary w-100 btn-lg">Guardar producto</button>
+    </div>
+  </div>
+
+  {% if producto %}
+    <div class="card mt-4">
+      <div class="card-header"><h5 class="mb-0">Imágenes actuales</h5></div>
+      <div class="card-body">
+        <div class="row g-3">
+          {% for imagen in producto.imagenes.all %}
+            <div class="col-md-6 col-xl-3">
+              <div class="border rounded p-3 h-100 {% if not imagen.activo %}opacity-50{% endif %}">
+                <img src="{{ imagen.imagen.url }}" class="img-fluid rounded mb-3" style="height:140px;width:100%;object-fit:cover" alt="{{ imagen.alt|default:producto.nombre }}">
+                <div class="form-check mb-2">
+                  <input class="form-check-input" type="radio" name="imagen_principal_galeria" value="{{ imagen.id }}" id="principal{{ imagen.id }}" {% if imagen.principal %}checked{% endif %}>
+                  <label class="form-check-label" for="principal{{ imagen.id }}">Usar como principal</label>
+                </div>
+                <div class="form-check mb-2">
+                  <input class="form-check-input" type="checkbox" name="imagen_activo_{{ imagen.id }}" id="activo{{ imagen.id }}" {% if imagen.activo %}checked{% endif %}>
+                  <label class="form-check-label" for="activo{{ imagen.id }}">Activa</label>
+                </div>
+                <label class="form-label small">Orden</label>
+                <input class="form-control form-control-sm mb-2" type="number" min="0" name="imagen_orden_{{ imagen.id }}" value="{{ imagen.orden }}">
+                <label class="form-label small">Alt / descripción</label>
+                <input class="form-control form-control-sm" name="imagen_alt_{{ imagen.id }}" value="{{ imagen.alt|default:'' }}">
+                <button type="button" class="btn btn-outline-danger btn-sm w-100 mt-3" data-bs-toggle="modal" data-bs-target="#eliminarImagen{{ imagen.id }}">Desactivar imagen</button>
+              </div>
+            </div>
+          {% empty %}
+            <div class="col-12"><div class="alert alert-info mb-0">Este producto aún no tiene imágenes de galería.</div></div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+</form>
+
+{% if producto %}
+  {% for imagen in producto.imagenes.all %}
+    <div class="modal fade" id="eliminarImagen{{ imagen.id }}" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <form class="modal-content" method="post" action="{% url 'tienda:admin_producto_imagen_eliminar' producto.id imagen.id %}">
+          {% csrf_token %}
+          <div class="modal-header"><h5 class="modal-title">Desactivar imagen</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+          <div class="modal-body">La imagen no se borrará del servidor, solo dejará de mostrarse en la tienda pública.</div>
+          <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-danger">Desactivar</button></div>
+        </form>
+      </div>
+    </div>
+  {% endfor %}
+{% endif %}
+{% endblock %}
