@@ -147,7 +147,7 @@ class ClientePedido(models.Model):
     nombres = models.CharField(max_length=120)
     apellidos = models.CharField(max_length=120)
     telefono = models.CharField(max_length=30)
-    email = models.EmailField()
+    email = models.EmailField(blank=True)
     direccion = models.TextField()
     departamento = models.CharField(max_length=120)
     municipio = models.CharField(max_length=120)
@@ -231,6 +231,8 @@ class Pedido(models.Model):
     fecha_transferencia = models.DateField(blank=True, null=True)
     observaciones_cliente = models.TextField(blank=True)
     observaciones_admin = models.TextField(blank=True)
+    correo_confirmacion_enviado = models.BooleanField(default=False)
+    fecha_correo_confirmacion = models.DateTimeField(blank=True, null=True)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 

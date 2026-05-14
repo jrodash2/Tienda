@@ -59,7 +59,7 @@ class CheckoutForm(forms.Form):
     nombres = forms.CharField(max_length=120)
     apellidos = forms.CharField(max_length=120)
     telefono = forms.CharField(max_length=30)
-    email = forms.EmailField()
+    email = forms.EmailField(required=False)
     tipo_entrega = forms.ChoiceField(choices=Pedido.TipoEntrega.choices, initial=Pedido.TipoEntrega.ENVIO_DOMICILIO, widget=forms.RadioSelect)
     direccion = forms.CharField(label='Dirección de entrega', widget=forms.Textarea(attrs={'rows': 3}), required=False)
     departamento = forms.CharField(label='Departamento de entrega', max_length=120, required=False)

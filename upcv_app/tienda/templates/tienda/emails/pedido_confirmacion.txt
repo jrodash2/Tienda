@@ -1,0 +1,46 @@
+Gracias por su pedido en {{ site_name }}.
+
+Hola {{ cliente.nombres }}, hemos recibido su pedido correctamente.
+
+Número de pedido: {{ pedido.codigo_pedido }}
+Guarde este número. Lo necesitará para consultar el estado de su compra y para subir o revisar su comprobante de pago.
+
+Resumen del pedido
+Fecha: {{ pedido.fecha_creacion|date:'d/m/Y H:i' }}
+Estado del pedido: {{ pedido.get_estado_display }}
+Estado del pago: {{ pedido.get_estado_pago_display }}
+Subtotal: Q {{ pedido.subtotal }}
+Envío: Q {{ pedido.costo_envio }}
+Total a pagar: Q {{ pedido.total }}
+
+Forma de entrega
+{% if pedido.tipo_entrega == 'recoger_tienda' %}Recoger en tienda
+{% if pedido.ubicacion_recogida %}Ubicación: {{ pedido.ubicacion_recogida.nombre }}
+Dirección: {{ pedido.ubicacion_recogida.direccion }}
+{% if pedido.ubicacion_recogida.horario %}Horario: {{ pedido.ubicacion_recogida.horario }}
+{% endif %}{% if pedido.ubicacion_recogida.telefono %}Teléfono: {{ pedido.ubicacion_recogida.telefono }}
+{% endif %}{% if pedido.ubicacion_recogida.google_maps_url %}Google Maps: {{ pedido.ubicacion_recogida.google_maps_url }}
+{% endif %}{% endif %}{% else %}Envío a domicilio
+Dirección: {{ pedido.direccion_entrega|default:pedido.cliente.direccion }}
+Departamento: {{ pedido.departamento_entrega|default:pedido.cliente.departamento }}
+Municipio: {{ pedido.municipio_entrega|default:pedido.cliente.municipio }}
+Costo de envío: Q {{ pedido.costo_envio }}
+{% endif %}
+Productos
+{% for detalle in detalles %}- {{ detalle.nombre_producto_snapshot }} | Cantidad: {{ detalle.cantidad }} | Precio unitario: Q {{ detalle.precio_unitario }} | Subtotal: Q {{ detalle.subtotal }}
+{% endfor %}
+Pago por transferencia
+Total a pagar: Q {{ pedido.total }}
+{% if cuentas_bancarias %}Cuentas bancarias activas:
+{% for cuenta in cuentas_bancarias %}- {{ cuenta.banco }} | {{ cuenta.nombre_cuenta }} | Cuenta {{ cuenta.tipo_cuenta }}: {{ cuenta.numero_cuenta }} | Moneda: {{ cuenta.moneda }}{% if cuenta.instrucciones %} | {{ cuenta.instrucciones }}{% endif %}
+{% endfor %}{% else %}No hay cuentas bancarias activas configuradas. Comuníquese con la tienda para recibir instrucciones de pago.
+{% endif %}
+Instrucciones:
+1. Realice la transferencia bancaria por el total indicado.
+2. Tome foto o descargue el comprobante.
+3. Ingrese a “Rastrear pedido”: {{ rastreo_url }}
+4. Escriba su número de pedido y el correo o teléfono usado.
+5. Suba el comprobante. También puede hacerlo desde: {{ pago_url }}
+6. El administrador revisará su pago y actualizará el estado del pedido.
+
+Gracias por comprar en {{ site_name }}.

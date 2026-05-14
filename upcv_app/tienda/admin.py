@@ -57,7 +57,7 @@ class PedidoAdmin(admin.ModelAdmin):
     list_display = ('codigo_pedido', 'cliente', 'total', 'tipo_entrega', 'estado', 'estado_pago', 'metodo_pago', 'fecha_creacion')
     list_filter = ('tipo_entrega', 'estado', 'estado_pago', 'metodo_pago', 'fecha_creacion')
     search_fields = ('codigo_pedido', 'cliente__nombres', 'cliente__apellidos', 'cliente__email', 'cliente__telefono')
-    readonly_fields = ('codigo_pedido', 'fecha_creacion', 'fecha_actualizacion')
+    readonly_fields = ('codigo_pedido', 'correo_confirmacion_enviado', 'fecha_correo_confirmacion', 'fecha_creacion', 'fecha_actualizacion')
     inlines = [DetallePedidoInline]
 
 

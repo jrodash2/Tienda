@@ -14,6 +14,7 @@ from .forms import (
     CuentaBancariaForm, MarcaProductoForm, ProductoForm, RechazarPagoForm, UbicacionTiendaForm,
 )
 from .models import CategoriaProducto, ClientePedido, CuentaBancaria, DetallePedido, ImagenProducto, MarcaProducto, Pedido, Producto, UbicacionTienda
+from .services.email_service import programar_correo_confirmacion_pedido
 
 ENVIO_DEFAULT = Decimal('0.00')
 
@@ -282,8 +283,9 @@ def checkout(request):
                     )
                     producto.stock -= cantidad
                     producto.save(update_fields=['stock', 'fecha_actualizacion'])
+                programar_correo_confirmacion_pedido(pedido, request=request)
                 clear_cart(request)
-                messages.success(request, f'Su pedido fue registrado correctamente. Su número de pedido es: {pedido.codigo_pedido}. Guárdelo para consultar el estado de su compra y subir su comprobante.')
+                messages.success(request, f'Su pedido fue registrado correctamente. Su número de pedido es: {pedido.codigo_pedido}. Guárdelo para consultar el estado de su compra y subir su comprobante. Si ingresó un correo electrónico válido, recibirá una copia de los datos de su pedido.')
                 return redirect('tienda:pago_transferencia', codigo_pedido=pedido.codigo_pedido)
         except ValueError as exc:
             messages.error(request, str(exc))
