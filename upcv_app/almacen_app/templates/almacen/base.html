@@ -416,6 +416,31 @@
 
   {% endif %}
 
+
+  {% if es_administrador or es_tienda or es_ventas %}
+    <li class="sidebar-list"><i class="fa fa-thumb-tack"></i>
+      <a class="sidebar-link sidebar-title" href="#">
+        <svg class="stroke-icon"><use href="../assets/svg/icon-sprite.svg#stroke-ecommerce"></use></svg>
+        <svg class="fill-icon"><use href="../assets/svg/icon-sprite.svg#fill-ecommerce"></use></svg>
+        <span>Tienda</span>
+      </a>
+      <ul class="sidebar-submenu">
+        <li><a href="{% url 'tienda:admin_dashboard' %}">Dashboard tienda</a></li>
+        {% if es_administrador or es_tienda %}
+          <li><a href="{% url 'tienda:admin_productos' %}">Productos</a></li>
+          <li><a href="{% url 'tienda:admin_categorias' %}">Categorías</a></li>
+          <li><a href="{% url 'tienda:admin_marcas' %}">Marcas</a></li>
+        {% endif %}
+        <li><a href="{% url 'tienda:admin_pedidos' %}">Pedidos</a></li>
+        <li><a href="{% url 'tienda:admin_pagos_pendientes' %}">Pagos por revisar</a></li>
+        {% if es_administrador or es_tienda %}
+          <li><a href="{% url 'tienda:admin_cuentas' %}">Cuentas bancarias</a></li>
+        {% endif %}
+        <li><a href="{% url 'tienda:admin_reportes' %}">Reportes</a></li>
+      </ul>
+    </li>
+  {% endif %}
+
 {% endif %}
 
 
