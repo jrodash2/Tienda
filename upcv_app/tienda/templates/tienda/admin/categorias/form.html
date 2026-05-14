@@ -1,0 +1,1 @@
+{% extends 'tienda/admin/_base_admin_tienda.html' %}{% block tienda_admin_content %}<h3>Categoría</h3><form method="post" enctype="multipart/form-data" class="card card-body">{% csrf_token %}{{ form.as_p }}<button class="btn btn-primary">Guardar</button></form>{% endblock %}

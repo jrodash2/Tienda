@@ -1,0 +1,23 @@
+{% extends 'tienda/public/base_tienda.html' %}
+{% block title %}Tienda en línea{% endblock %}
+{% block content %}
+<section class="store-hero p-4 p-lg-5 mb-5">
+  <div class="row align-items-center g-4 position-relative">
+    <div class="col-lg-7">
+      <span class="badge bg-danger mb-3">Compra fácil y rápida</span>
+      <h1 class="display-5 fw-black store-section-title">Encuentra productos para tu hogar, oficina o negocio</h1>
+      <p class="lead text-muted">Catálogo moderno, carrito simple y pago por transferencia bancaria con seguimiento de pedido.</p>
+      <div class="d-flex flex-wrap gap-2"><a class="btn btn-danger btn-lg" href="{% url 'tienda:catalogo' %}">Ver catálogo</a><a class="btn btn-outline-dark btn-lg" href="{% url 'tienda:consultar_pedido' %}">Consultar pedido</a></div>
+    </div>
+    <div class="col-lg-5"><div class="bg-white rounded-4 shadow p-4"><h3 class="fw-bold">Ofertas, nuevos ingresos y productos destacados</h3><p class="text-muted mb-0">Explora categorías, compara precios y agrega al carrito en segundos.</p></div></div>
+  </div>
+</section>
+
+<section class="mb-5"><div class="d-flex justify-content-between align-items-end mb-3"><div><h2 class="store-section-title">Categorías para ti</h2><p class="store-section-subtitle mb-0">Navega por nuestras líneas principales</p></div><a href="{% url 'tienda:catalogo' %}" class="btn btn-outline-danger">Ver más</a></div><div class="store-category-row">{% for c in categorias %}<a class="store-category-pill" href="{% url 'tienda:catalogo' %}?categoria={{ c.slug }}">{% if c.imagen %}<img class="store-category-image" src="{{ c.imagen.url }}" alt="{{ c.nombre }}">{% else %}<div class="store-category-image">{{ c.nombre|slice:':1' }}</div>{% endif %}<span class="fw-bold">{{ c.nombre }}</span></a>{% empty %}<div class="alert alert-info">No hay categorías activas.</div>{% endfor %}</div></section>
+
+<section class="mb-5"><h2 class="store-section-title">Ofertas destacadas</h2><div class="row row-cols-1 row-cols-md-2 row-cols-xl-4 g-4">{% for producto in ofertas %}{% include 'tienda/public/_producto_card.html' %}{% empty %}<p class="text-muted">Aún no hay ofertas activas.</p>{% endfor %}</div></section>
+<section class="mb-5"><h2 class="store-section-title">Productos destacados</h2><div class="row row-cols-1 row-cols-md-2 row-cols-xl-4 g-4">{% for producto in destacados %}{% include 'tienda/public/_producto_card.html' %}{% empty %}<p class="text-muted">No hay productos destacados.</p>{% endfor %}</div></section>
+<section class="mb-5"><h2 class="store-section-title">Nuevos productos</h2><div class="row row-cols-1 row-cols-md-2 row-cols-xl-4 g-4">{% for producto in nuevos %}{% include 'tienda/public/_producto_card.html' %}{% empty %}<p class="text-muted">Pronto agregaremos nuevos productos.</p>{% endfor %}</div></section>
+
+<section class="row g-3"><div class="col-md-3"><div class="store-info-card"><strong>Pago por transferencia</strong><p class="mb-0 text-muted">Pago sencillo y verificable.</p></div></div><div class="col-md-3"><div class="store-info-card"><strong>Envíos disponibles</strong><p class="mb-0 text-muted">Coordina entrega con ventas.</p></div></div><div class="col-md-3"><div class="store-info-card"><strong>Consulta tu pedido</strong><p class="mb-0 text-muted">Rastrea con código y contacto.</p></div></div><div class="col-md-3"><div class="store-info-card"><strong>Atención personalizada</strong><p class="mb-0 text-muted">Te ayudamos a elegir.</p></div></div></section>
+{% endblock %}

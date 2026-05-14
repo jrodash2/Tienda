@@ -1,0 +1,60 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{% block title %}Tienda en línea{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'assets/css/vendors/bootstrap.css' %}">
+  <link rel="stylesheet" href="{% static 'assets/css/font-awesome.css' %}">
+  <link rel="stylesheet" href="{% static 'tienda/css/tienda.css' %}">
+</head>
+<body class="store-body">
+  <header class="store-header py-3">
+    <div class="container">
+      <div class="d-flex flex-wrap align-items-center gap-3">
+        <a class="store-logo" href="{% url 'tienda:inicio' %}">Tienda</a>
+        <a class="store-header-btn d-none d-lg-inline-flex" href="{% url 'tienda:catalogo' %}">Categorías</a>
+        <form class="store-search flex-grow-1 d-flex" action="{% url 'tienda:catalogo' %}">
+          <input name="q" class="form-control" value="{{ request.GET.q }}" placeholder="Buscar productos, marcas o SKU">
+          <button class="btn btn-dark px-4">Buscar</button>
+        </form>
+        <div class="store-header-actions d-flex align-items-center gap-2">
+          <a class="store-header-btn" href="{% url 'tienda:consultar_pedido' %}">Rastrear pedido</a>
+          <a class="store-header-btn" href="{% url 'tienda:carrito' %}">Carrito <span class="store-cart-badge">{{ carrito_total_items|default:0 }}</span></a>
+        </div>
+      </div>
+    </div>
+  </header>
+  <nav class="store-nav-secondary py-2">
+    <div class="container d-flex flex-wrap gap-4">
+      <a href="{% url 'tienda:catalogo' %}?ofertas=1">Ofertas</a>
+      <a href="{% url 'tienda:catalogo' %}">Marcas</a>
+      <a href="{% url 'tienda:catalogo' %}">Catálogo</a>
+      <a href="{% url 'tienda:catalogo' %}?orden=recientes">Productos nuevos</a>
+      <a href="{% url 'tienda:catalogo' %}?orden=destacados">Más vendidos</a>
+      <a href="{% url 'tienda:consultar_pedido' %}">Consultar pedido</a>
+    </div>
+  </nav>
+  <main class="container py-4">
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show shadow-sm">{{ message }}<button class="btn-close" data-bs-dismiss="alert"></button></div>
+      {% endfor %}
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="store-footer mt-5 py-5">
+    <div class="container">
+      <div class="row g-4">
+        <div class="col-md-4"><h5>Tienda en línea</h5><p class="mb-0">Catálogo moderno con pago por transferencia bancaria.</p></div>
+        <div class="col-md-4"><h5>Ayuda</h5><a href="{% url 'tienda:consultar_pedido' %}">Rastrear pedido</a><br><a href="{% url 'tienda:catalogo' %}">Ver catálogo</a></div>
+        <div class="col-md-4"><h5>Compra segura</h5><p class="mb-0">Guarde su número de pedido para consultar su compra y subir comprobantes.</p></div>
+      </div>
+    </div>
+  </footer>
+  <script src="{% static 'assets/js/jquery.min.js' %}"></script>
+  <script src="{% static 'assets/js/bootstrap/bootstrap.bundle.min.js' %}"></script>
+  <script src="{% static 'tienda/js/tienda.js' %}"></script>
+</body>
+</html>
