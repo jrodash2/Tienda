@@ -73,7 +73,15 @@ class ComprobanteTransferenciaForm(BootstrapModelForm):
     class Meta:
         model = Pedido
         fields = ['comprobante_transferencia', 'banco_origen', 'numero_referencia', 'fecha_transferencia']
-        widgets = {'fecha_transferencia': forms.DateInput(attrs={'type': 'date'})}
+        widgets = {
+            'comprobante_transferencia': forms.ClearableFileInput(attrs={'accept': 'image/*,.pdf'}),
+            'fecha_transferencia': forms.DateInput(attrs={'type': 'date'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['comprobante_transferencia'].required = True
+        self.fields['comprobante_transferencia'].help_text = 'Adjunte una imagen o PDF del comprobante de transferencia.'
 
 
 class CuentaBancariaForm(BootstrapModelForm):

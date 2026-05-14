@@ -138,42 +138,83 @@ def checkout(request):
                     producto.stock -= item['cantidad']
                     producto.save(update_fields=['stock', 'fecha_actualizacion'])
                 clear_cart(request)
-                messages.success(request, 'Pedido creado correctamente. Continúa con tu transferencia bancaria.')
+                messages.success(request, f'Su pedido fue registrado correctamente. Su número de pedido es: {pedido.codigo_pedido}. Guárdelo, ya que lo necesitará para consultar el estado de su compra y para subir su comprobante de transferencia.')
                 return redirect('tienda:pago_transferencia', codigo_pedido=pedido.codigo_pedido)
         except ValueError as exc:
             messages.error(request, str(exc))
     return render(request, 'tienda/public/checkout.html', {'form': form, 'items': items, 'subtotal': subtotal, 'envio': ENVIO_DEFAULT, 'total': total})
 
 
+def _pedido_por_contacto(codigo_pedido, contacto):
+    return Pedido.objects.select_related('cliente').prefetch_related('detalles').filter(
+        codigo_pedido__iexact=codigo_pedido.strip()
+    ).filter(
+        Q(cliente__email__iexact=contacto.strip()) | Q(cliente__telefono__iexact=contacto.strip())
+    ).first()
+
+
+def _puede_subir_comprobante(pedido):
+    return pedido.estado_pago in [Pedido.EstadoPago.PENDIENTE, Pedido.EstadoPago.RECHAZADO]
+
+
+def _guardar_comprobante_transferencia(form):
+    pedido = form.save(commit=False)
+    pedido.estado_pago = Pedido.EstadoPago.COMPROBANTE_RECIBIDO
+    pedido.estado = Pedido.Estado.PAGO_EN_REVISION
+    pedido.save()
+    return pedido
+
+
+def _contexto_publico_pedido(pedido, form=None, contacto=''):
+    return {
+        'pedido': pedido,
+        'form': form or ComprobanteTransferenciaForm(instance=pedido),
+        'cuentas': CuentaBancaria.objects.filter(activo=True),
+        'puede_subir_comprobante': _puede_subir_comprobante(pedido),
+        'contacto_consulta': contacto,
+    }
+
+
 def pago_transferencia(request, codigo_pedido):
-    pedido = get_object_or_404(Pedido.objects.select_related('cliente'), codigo_pedido=codigo_pedido)
+    pedido = get_object_or_404(Pedido.objects.select_related('cliente').prefetch_related('detalles'), codigo_pedido=codigo_pedido)
     form = ComprobanteTransferenciaForm(request.POST or None, request.FILES or None, instance=pedido)
     if request.method == 'POST' and form.is_valid():
-        pedido = form.save(commit=False)
-        pedido.estado_pago = Pedido.EstadoPago.COMPROBANTE_RECIBIDO
-        pedido.estado = Pedido.Estado.PAGO_EN_REVISION
-        pedido.save()
+        pedido = _guardar_comprobante_transferencia(form)
         messages.success(request, 'Comprobante recibido. El administrador revisará y confirmará su pago.')
         return redirect('tienda:estado_pedido', codigo_pedido=pedido.codigo_pedido)
-    return render(request, 'tienda/public/pago_transferencia.html', {
-        'pedido': pedido, 'form': form, 'cuentas': CuentaBancaria.objects.filter(activo=True)
-    })
+    return render(request, 'tienda/public/pago_transferencia.html', _contexto_publico_pedido(pedido, form))
 
 
 def consultar_pedido(request):
     pedido = None
+    form = None
+    contacto = ''
     if request.method == 'POST':
+        accion = request.POST.get('accion', 'buscar')
         codigo = request.POST.get('codigo_pedido', '').strip()
         contacto = request.POST.get('contacto', '').strip()
-        pedido = Pedido.objects.filter(codigo_pedido__iexact=codigo).filter(Q(cliente__email__iexact=contacto) | Q(cliente__telefono__iexact=contacto)).first()
+        pedido = _pedido_por_contacto(codigo, contacto)
         if not pedido:
-            messages.error(request, 'No encontramos un pedido con esos datos.')
-    return render(request, 'tienda/public/consulta_pedido.html', {'pedido': pedido})
+            messages.error(request, 'No encontramos un pedido con esos datos. Verifique el código y el correo o teléfono utilizado en la compra.')
+        elif accion == 'subir_comprobante':
+            form = ComprobanteTransferenciaForm(request.POST, request.FILES, instance=pedido)
+            if not _puede_subir_comprobante(pedido):
+                messages.warning(request, 'Este pedido ya tiene un comprobante en revisión o un pago confirmado.')
+            elif form.is_valid():
+                pedido = _guardar_comprobante_transferencia(form)
+                messages.success(request, 'Comprobante recibido correctamente. Su pago será revisado por el administrador.')
+                form = ComprobanteTransferenciaForm(instance=pedido)
+            else:
+                messages.error(request, 'Revise el formulario de comprobante e intente nuevamente.')
+    context = {'pedido': pedido, 'contacto_consulta': contacto}
+    if pedido:
+        context.update(_contexto_publico_pedido(pedido, form, contacto))
+    return render(request, 'tienda/public/consulta_pedido.html', context)
 
 
 def estado_pedido(request, codigo_pedido):
     pedido = get_object_or_404(Pedido.objects.select_related('cliente').prefetch_related('detalles'), codigo_pedido=codigo_pedido)
-    return render(request, 'tienda/public/estado_pedido.html', {'pedido': pedido})
+    return render(request, 'tienda/public/estado_pedido.html', _contexto_publico_pedido(pedido))
 
 
 @login_required
