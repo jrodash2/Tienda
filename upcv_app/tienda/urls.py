@@ -28,10 +28,16 @@ urlpatterns = [
     path('admin/marcas/crear/', views.admin_marca_form, name='admin_marca_crear'),
     path('admin/marcas/<int:pk>/editar/', views.admin_marca_form, name='admin_marca_editar'),
     path('admin/pedidos/', views.admin_pedidos, name='admin_pedidos'),
-    path('admin/pedidos/<int:pk>/', views.admin_pedido_detalle, name='admin_pedido_detalle'),
+    path('admin/pedidos/<int:pk>/detalle/', views.admin_pedido_detalle, name='admin_pedido_detalle'),
+    # Alias conservado para enlaces internos generados antes de estandarizar la ruta con /detalle/.
+    path('admin/pedidos/<int:pk>/', views.admin_pedido_detalle, name='admin_pedido_detalle_simple'),
     path('admin/pagos-pendientes/', views.admin_pagos_pendientes, name='admin_pagos_pendientes'),
-    path('admin/cuentas-bancarias/', views.admin_cuentas, name='admin_cuentas'),
-    path('admin/cuentas-bancarias/crear/', views.admin_cuenta_form, name='admin_cuenta_crear'),
-    path('admin/cuentas-bancarias/<int:pk>/editar/', views.admin_cuenta_form, name='admin_cuenta_editar'),
+    path('admin/cuentas-bancarias/', views.admin_cuentas, name='admin_cuentas_bancarias'),
+    path('admin/cuentas-bancarias/crear/', views.admin_cuenta_form, name='admin_cuenta_bancaria_crear'),
+    path('admin/cuentas-bancarias/<int:pk>/editar/', views.admin_cuenta_form, name='admin_cuenta_bancaria_editar'),
+    # Alias conservados para compatibilidad con el primer scaffold de la app tienda.
+    path('admin/cuentas/', views.admin_cuentas, name='admin_cuentas'),
+    path('admin/cuentas/crear/', views.admin_cuenta_form, name='admin_cuenta_crear'),
+    path('admin/cuentas/<int:pk>/editar/', views.admin_cuenta_form, name='admin_cuenta_editar'),
     path('admin/reportes/', views.admin_reportes, name='admin_reportes'),
 ]

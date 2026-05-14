@@ -26,7 +26,36 @@
     </div>
   </div>
 
+  {% if user.is_superuser or es_administrador or es_tienda or es_ventas %}
+  <div class="container-fluid">
+    <div class="row g-3">
+      <div class="col-sm-6 col-xl-3">
+        <a class="card text-decoration-none" href="{% url 'tienda:admin_productos' %}">
+          <div class="card-body"><h5 class="mb-1">Productos</h5><p class="mb-0 text-muted">Administrar catálogo</p></div>
+        </a>
+      </div>
+      <div class="col-sm-6 col-xl-3">
+        <a class="card text-decoration-none" href="{% url 'tienda:admin_pedidos' %}">
+          <div class="card-body"><h5 class="mb-1">Pedidos</h5><p class="mb-0 text-muted">Gestionar ventas</p></div>
+        </a>
+      </div>
+      <div class="col-sm-6 col-xl-3">
+        <a class="card text-decoration-none" href="{% url 'tienda:admin_pagos_pendientes' %}">
+          <div class="card-body"><h5 class="mb-1">Pagos pendientes</h5><p class="mb-0 text-muted">Revisar comprobantes</p></div>
+        </a>
+      </div>
+      <div class="col-sm-6 col-xl-3">
+        <a class="card text-decoration-none" href="{% url 'tienda:admin_cuentas_bancarias' %}">
+          <div class="card-body"><h5 class="mb-1">Cuentas bancarias</h5><p class="mb-0 text-muted">Configurar transferencias</p></div>
+        </a>
+      </div>
+      <div class="col-sm-6 col-xl-3">
+        <a class="card text-decoration-none" href="{% url 'tienda:inicio' %}" target="_blank" rel="noopener">
+          <div class="card-body"><h5 class="mb-1">Ver tienda pública</h5><p class="mb-0 text-muted">Abrir catálogo</p></div>
+        </a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
-  
-  
 {% endblock %}
