@@ -1,0 +1,107 @@
+{% extends 'empleados/base.html' %}
+
+{% block content %}
+<div class="page-body">
+  <div class="container-fluid">
+    <div class="page-title">
+      <div class="row">
+        <div class="col-6">
+          <h4 class="card-title mb-0">Configuración General</h4>
+        </div>
+        <div class="col-6"> 
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="index.html">                                       
+                <svg class="stroke-icon">
+                  <use href="../assets/svg/icon-sprite.svg#stroke-home"></use>
+                </svg></a></li>
+            <li class="breadcrumb-item">Dashboard</li>
+            <li class="breadcrumb-item active">Configuración General</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Container-fluid starts-->
+  <div class="container-fluid">
+    <div class="edit-profile">
+      <div class="row">
+        <!-- Formulario de configuración general -->
+        <div class="col-xl-12">
+          <div class="card">
+            <div class="card-header">
+              <!-- Aquí puedes agregar un título o más información -->
+            </div>
+            <div class="card-body">
+              <!-- Mostramos los mensajes de éxito o error si existen -->
+              {% if messages %}
+                <ul>
+                  {% for message in messages %}
+                    <li class="message">{{ message }}</li>
+                  {% endfor %}
+                </ul>
+              {% endif %}
+
+              <!-- Formulario para editar la configuración general -->
+              <form method="POST" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="mb-3">
+                      <label for="id_nombre_institucion" class="form-label">Nombre de la Institución</label>
+                      {{ form.nombre_institucion }}
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="mb-3">
+                      <label for="id_direccion" class="form-label">Dirección</label>
+                      {{ form.direccion }}
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="mb-3">
+                      <label for="id_logotipo" class="form-label">Logotipo</label>
+                      {{ form.logotipo }}
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="mb-3">
+                      <label for="id_logotipo2" class="form-label">Logotipo 2</label>
+                      {{ form.logotipo2 }}
+                    </div>
+                  </div>
+                </div>
+                <div class="form-footer text-end">
+                  <button class="btn btn-primary" type="submit">Guardar Configuración</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Container-fluid Ends--> 
+    <!-- Mostrar los logotipos cargados -->
+    <div class="row">
+        <div class="col-md-12">
+          <h5>Logotipos Cargados:</h5>
+          <div class="logotipos">
+            {% if configuracion.logotipo %}
+              <div class="logotipo">
+                <p>Logotipo 1:</p>
+                <img src="{{ configuracion.logotipo.url }}" alt="Logotipo 1" style="max-width: 200px; height: auto;">
+              </div>
+            {% endif %}
+  
+            {% if configuracion.logotipo2 %}
+              <div class="logotipo">
+                <p>Logotipo 2:</p>
+                <img src="{{ configuracion.logotipo2.url }}" alt="Logotipo 2" style="max-width: 200px; height: auto;">
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+</div>
+{% endblock %}

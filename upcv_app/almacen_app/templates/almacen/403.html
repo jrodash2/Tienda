@@ -1,0 +1,31 @@
+{% extends 'almacen/base.html' %}
+
+{% load static %}
+
+{% block title %}Error 400 - Acceso Denegado{% endblock %}
+
+{% block content %}
+<div class="tap-top"><i data-feather="chevrons-up"></i></div>
+    <!-- tap on tap ends-->
+    <!-- page-wrapper Start-->
+    <div class="page-wrapper compact-wrapper" id="pageWrapper">
+      <!-- error-400 start-->
+      <div class="error-wrapper">
+        <div class="container"><img class="img-100" src="{% static 'assets/images/other-images/sad.png' %}" alt="">
+            
+          <div class="error-heading">
+            
+            <h2 class="headline font-info">400 </h2>
+            <h6 class=" font-info">Acceso Denegado </h6>
+          </div>
+          <div class="col-md-8 offset-md-2"> 
+            <p class="sub-content">Usted no tiene permisos para visualizar esta página</p>
+          </div>
+        
+        </div>
+      </div>
+      <!-- error-400 end-->
+    </div>
+
+
+    {% endblock %}

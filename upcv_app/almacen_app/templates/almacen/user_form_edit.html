@@ -1,0 +1,140 @@
+{% extends 'almacen/base.html' %}
+
+{% block content %}
+<div class="page-body">
+  <div class="container-fluid">
+    <div class="page-title">
+      <div class="row">
+        <div class="col-6">
+          <h4 class="card-title mb-0">Editar Usuario</h4>
+        </div>
+        <div class="col-6">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="index.html">
+                <svg class="stroke-icon">
+                  <use href="../assets/svg/icon-sprite.svg#stroke-home"></use>
+                </svg></a></li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="container-fluid">
+    <div class="edit-profile">
+      <div class="row">
+        <div class="col-xl-12">
+          <div class="card">
+            <div class="card-body">
+
+              {% if messages %}
+              <ul>
+                {% for message in messages %}
+                <li class="message">{{ message }}</li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+
+              {% if form.errors or perfil_form.errors %}
+              <div class="alert alert-danger">
+                <ul>
+                  {% for field, errors in form.errors.items %}
+                  <li><strong>{{ field }}:</strong> {{ errors|join:", " }}</li>
+                  {% endfor %}
+                  {% for field, errors in perfil_form.errors.items %}
+                  <li><strong>{{ field }}:</strong> {{ errors|join:", " }}</li>
+                  {% endfor %}
+                </ul>
+              </div>
+              {% endif %}
+
+              <form method="POST" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="row">
+                  <div class="col-md-6">
+                    <!-- Campos del usuario -->
+                    <div class="form-group">
+                      <label for="{{ form.username.id_for_label }}">Nombre de usuario</label>
+                      {{ form.username }}
+                    </div>
+                    <div class="form-group">
+                      <label for="{{ form.first_name.id_for_label }}">Nombre</label>
+                      {{ form.first_name }}
+                    </div>
+                    <div class="form-group">
+                      <label for="{{ form.last_name.id_for_label }}">Apellido</label>
+                      {{ form.last_name }}
+                    </div>
+                    <div class="form-group">
+                      <label for="{{ form.group.id_for_label }}">Grupo</label>
+                      {{ form.group }}
+                    </div>
+
+                    <!-- Campo foto viene de perfil_form -->
+                    <div class="form-group">
+                      <label for="{{ perfil_form.foto.id_for_label }}">Foto de perfil</label>
+                      {{ perfil_form.foto }}
+                    </div>
+
+                    {% if form.instance.perfil and form.instance.perfil.foto %}
+                    <div class="form-group mt-2">
+                      <label>Vista previa de la foto actual:</label><br>
+                      <img src="{{ form.instance.perfil.foto.url }}" alt="Foto actual" width="120" height="120" style="object-fit: cover; border-radius: 6px;">
+                    </div>
+                    {% endif %}
+                  </div>
+
+                  <div class="col-md-6">
+                    <!-- Otros campos del usuario -->
+                    <div class="form-group">
+                      <label for="{{ form.email.id_for_label }}">Email</label>
+                      {{ form.email }}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-footer text-end">
+                  <button class="btn btn-primary" type="submit">Editar Usuario</button>
+                </div>
+              </form>
+
+              <div class="mt-4">
+                <h5>Usuarios Creados</h5>
+                <table class="table table-striped">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Nombre de Usuario</th>
+                      <th>Nombre</th>
+                      <th>Apellido</th>
+                      <th>Correo Electrónico</th>
+                      <th>Grupo</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for user in users %}
+                    <tr>
+                      <td>{{ user.id }}</td>
+                      <td>{{ user.username }}</td>
+                      <td>{{ user.first_name }}</td>
+                      <td>{{ user.last_name }}</td>
+                      <td>{{ user.email }}</td>
+                      <td>{{ user.groups.all|join:", " }}</td>
+                      <td>
+                        <a href="{% url 'almacen:user_edit' user.id %}" class="btn btn-primary btn-sm">Editar</a>
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

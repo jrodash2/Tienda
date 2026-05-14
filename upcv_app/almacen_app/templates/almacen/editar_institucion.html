@@ -1,0 +1,125 @@
+{% extends 'almacen/base.html' %}
+{% load static %}
+{% block content %}
+
+<!-- jQuery y DataTables -->
+<script src="{% static 'assets/js/jquery.min.js' %}"></script>
+<script src="{% static 'assets/js/datatable/datatables/jquery.dataTables.min.js' %}"></script>
+<script src="{% static 'assets/js/datatable/datatables/datatable.custom.js' %}"></script>
+
+<div class="page-body">
+  <div class="container-fluid">
+    <div class="page-title">
+      <div class="row">
+        <div class="col-6">
+          <h4 class="card-title mb-0">Editar Información de la Institución</h4>
+        </div>
+        <div class="col-6">
+          <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="">
+                <svg class="stroke-icon">
+                  <use href="../assets/svg/icon-sprite.svg#stroke-home"></use>
+                </svg></a></li>
+            <li class="breadcrumb-item">Configuración</li>
+            <li class="breadcrumb-item active">Institución</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Formulario -->
+  <div class="container-fluid">
+    <div class="edit-profile">
+      <div class="row">
+        <div class="col-xl-12">
+          <div class="card">
+            <div class="card-header">
+              <h5>Editar Datos Generales</h5>
+            </div>
+            <div class="card-body">
+              {% if messages %}
+              <ul>
+                {% for message in messages %}
+                <li class="message">{{ message }}</li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+              
+               {% if form.errors %}
+              <div class="alert alert-danger">
+                <ul>
+                  {% for field, errors in form.errors.items %}
+                  <li><strong>{{ field }}:</strong> {{ errors|join:", " }}</li>
+                  {% endfor %}
+                </ul>
+              </div>
+              {% endif %} 
+
+              <form method="POST" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="{{ form.nombre.id_for_label }}">Nombre</label>
+                      {{ form.nombre }}
+                    </div>
+                    <div class="form-group">
+                      <label for="{{ form.direccion.id_for_label }}">Dirección</label>
+                      {{ form.direccion }}
+                    </div>
+                    <div class="form-group">
+                      <label for="{{ form.telefono.id_for_label }}">Teléfono</label>
+                      {{ form.telefono }}
+                    </div>
+                  </div>
+
+                  <div class="col-md-6">
+                    <div class="form-group">
+                      <label for="{{ form.pagina_web.id_for_label }}">Página web</label>
+                      {{ form.pagina_web }}
+                    </div>
+                    <div class="form-group">
+                      <label for="{{ form.logo.id_for_label }}">Logo principal</label>
+                      {{ form.logo }}
+                    </div>
+                    <div class="form-group">
+                      <label for="{{ form.logo2.id_for_label }}">Logo secundario</label>
+                      {{ form.logo2 }}
+                    </div>
+                  </div>
+                </div>
+                <br>
+                <div class="form-footer text-end">
+                  <button class="btn btn-primary" type="submit">Guardar Cambios</button>
+                </div>
+              </form>
+
+              {% if institucion.logo or institucion.logo2 %}
+              <hr>
+              <div class="row text-center">
+                {% if institucion.logo %}
+                <div class="col-md-6">
+                  <h6>Logo principal actual:</h6>
+                  <img src="{{ institucion.logo.url }}" alt="Logo principal" height="80">
+                </div>
+                {% endif %}
+                {% if institucion.logo2 %}
+                <div class="col-md-6">
+                  <h6>Logo secundario actual:</h6>
+                  <img src="{{ institucion.logo2.url }}" alt="Logo secundario" height="80">
+                </div>
+                {% endif %}
+              </div>
+              {% endif %}
+
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}
