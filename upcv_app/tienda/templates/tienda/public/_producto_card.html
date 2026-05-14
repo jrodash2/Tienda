@@ -1,3 +1,5 @@
+{% load tienda_extras %}
+{% whatsapp_producto_url producto as whatsapp_url %}
 <div class="col">
   <div class="store-product-card position-relative">
     {% if producto.tiene_oferta %}<span class="store-discount-badge">-{{ producto.porcentaje_descuento }}%</span>{% endif %}
@@ -9,9 +11,14 @@
       <div class="store-brand">{{ producto.marca.nombre|default:producto.categoria.nombre }}</div>
       <h5 class="store-product-title"><a class="text-decoration-none text-dark" href="{% url 'tienda:detalle_producto' producto.slug %}">{{ producto.nombre }}</a></h5>
       {% if producto.tiene_oferta %}<div class="store-old-price">Q {{ producto.precio }}</div><div class="store-price">Q {{ producto.precio_oferta }}</div>{% else %}<div class="store-price">Q {{ producto.precio }}</div>{% endif %}
-      <div class="d-flex gap-2 mt-3">
-        <a class="btn btn-outline-dark flex-fill" href="{% url 'tienda:detalle_producto' producto.slug %}">Ver detalle</a>
-        {% if producto.disponible_para_compra %}<form method="post" action="{% url 'tienda:agregar_carrito' producto.id %}" class="flex-fill">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="btn btn-danger w-100">Agregar</button></form>{% else %}<a class="btn btn-secondary flex-fill" href="mailto:ventas@example.com?subject=Consulta {{ producto.codigo_sku }}">Consultar</a>{% endif %}
+      <div class="store-product-actions mt-3">
+        <a class="btn btn-outline-dark" href="{% url 'tienda:detalle_producto' producto.slug %}">Ver detalle</a>
+        {% if producto.disponible_para_compra %}
+          <form method="post" action="{% url 'tienda:agregar_carrito' producto.id %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="btn btn-danger w-100">Agregar</button></form>
+        {% else %}
+          <a class="btn btn-secondary" href="{{ whatsapp_url }}" target="_blank" rel="noopener">Consultar</a>
+        {% endif %}
+        <a href="{{ whatsapp_url }}" target="_blank" rel="noopener" class="btn btn-whatsapp-sm"><i class="fa fa-whatsapp" aria-hidden="true"></i> WhatsApp</a>
       </div>
     </div>
   </div>

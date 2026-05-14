@@ -25,8 +25,9 @@
           <small class="text-muted d-block mt-2">Formatos permitidos: JPG, JPEG, PNG y WEBP. Máximo 5 MB por imagen.</small>
           {% if producto and producto.imagen_principal %}
             <hr>
-            <p class="fw-semibold mb-2">Imagen principal actual</p>
+            <p class="fw-semibold mb-2">Imagen principal heredada</p>
             <img src="{{ producto.imagen_principal.url }}" class="img-fluid rounded border" alt="{{ producto.nombre }}">
+            <small class="text-muted d-block mt-2">Se usa como respaldo si no hay imágenes activas en la galería.</small>
           {% endif %}
         </div>
       </div>
@@ -42,20 +43,32 @@
           {% for imagen in producto.imagenes.all %}
             <div class="col-md-6 col-xl-3">
               <div class="border rounded p-3 h-100 {% if not imagen.activo %}opacity-50{% endif %}">
-                <img src="{{ imagen.imagen.url }}" class="img-fluid rounded mb-3" style="height:140px;width:100%;object-fit:cover" alt="{{ imagen.alt|default:producto.nombre }}">
+                {% if imagen.imagen %}
+                  <img src="{{ imagen.imagen.url }}" class="img-fluid rounded mb-3" style="height:140px;width:100%;object-fit:cover" alt="{{ imagen.alt|default:producto.nombre }}">
+                {% else %}
+                  <div class="bg-light rounded mb-3 d-flex align-items-center justify-content-center text-muted" style="height:140px;">Sin archivo</div>
+                {% endif %}
+                <div class="d-flex flex-wrap gap-1 mb-3">
+                  {% if imagen.principal %}<span class="badge bg-primary">Principal</span>{% endif %}
+                  {% if imagen.activo %}<span class="badge bg-success">Activa</span>{% else %}<span class="badge bg-secondary">Inactiva</span>{% endif %}
+                </div>
                 <div class="form-check mb-2">
-                  <input class="form-check-input" type="radio" name="imagen_principal_galeria" value="{{ imagen.id }}" id="principal{{ imagen.id }}" {% if imagen.principal %}checked{% endif %}>
+                  <input class="form-check-input" type="radio" name="imagen_principal_id" value="{{ imagen.id }}" id="principal{{ imagen.id }}" {% if imagen.principal %}checked{% endif %}>
                   <label class="form-check-label" for="principal{{ imagen.id }}">Usar como principal</label>
                 </div>
                 <div class="form-check mb-2">
-                  <input class="form-check-input" type="checkbox" name="imagen_activo_{{ imagen.id }}" id="activo{{ imagen.id }}" {% if imagen.activo %}checked{% endif %}>
+                  <input class="form-check-input" type="checkbox" name="imagen_activa_{{ imagen.id }}" value="1" id="activo{{ imagen.id }}" {% if imagen.activo %}checked{% endif %}>
                   <label class="form-check-label" for="activo{{ imagen.id }}">Activa</label>
                 </div>
                 <label class="form-label small">Orden</label>
                 <input class="form-control form-control-sm mb-2" type="number" min="0" name="imagen_orden_{{ imagen.id }}" value="{{ imagen.orden }}">
                 <label class="form-label small">Alt / descripción</label>
-                <input class="form-control form-control-sm" name="imagen_alt_{{ imagen.id }}" value="{{ imagen.alt|default:'' }}">
-                <button type="button" class="btn btn-outline-danger btn-sm w-100 mt-3" data-bs-toggle="modal" data-bs-target="#eliminarImagen{{ imagen.id }}">Desactivar imagen</button>
+                <input class="form-control form-control-sm" type="text" name="imagen_alt_{{ imagen.id }}" value="{{ imagen.alt|default:'' }}">
+                {% if imagen.activo %}
+                  <button type="submit" class="btn btn-outline-danger btn-sm w-100 mt-3" name="desactivar_imagen_id" value="{{ imagen.id }}">Desactivar imagen</button>
+                {% else %}
+                  <button type="submit" class="btn btn-outline-success btn-sm w-100 mt-3" name="activar_imagen_id" value="{{ imagen.id }}">Activar imagen</button>
+                {% endif %}
               </div>
             </div>
           {% empty %}
@@ -66,19 +79,4 @@
     </div>
   {% endif %}
 </form>
-
-{% if producto %}
-  {% for imagen in producto.imagenes.all %}
-    <div class="modal fade" id="eliminarImagen{{ imagen.id }}" tabindex="-1" aria-hidden="true">
-      <div class="modal-dialog">
-        <form class="modal-content" method="post" action="{% url 'tienda:admin_producto_imagen_eliminar' producto.id imagen.id %}">
-          {% csrf_token %}
-          <div class="modal-header"><h5 class="modal-title">Desactivar imagen</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-          <div class="modal-body">La imagen no se borrará del servidor, solo dejará de mostrarse en la tienda pública.</div>
-          <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-danger">Desactivar</button></div>
-        </form>
-      </div>
-    </div>
-  {% endfor %}
-{% endif %}
 {% endblock %}

@@ -57,3 +57,10 @@ def cart_items(request):
         subtotal += line_total
         items.append({'producto': producto, 'cantidad': cantidad, 'precio': precio, 'subtotal': line_total})
     return items, subtotal
+
+
+def calcular_envio_items(items):
+    total_envio = Decimal('0.00')
+    for item in items:
+        total_envio += (item['producto'].costo_envio or Decimal('0.00')) * item['cantidad']
+    return total_envio
