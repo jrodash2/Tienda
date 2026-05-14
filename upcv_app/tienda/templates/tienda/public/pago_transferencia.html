@@ -1,42 +1,41 @@
 {% extends 'tienda/public/base_tienda.html' %}
+{% load tienda_extras %}
 
 {% block title %}Pedido {{ pedido.codigo_pedido }} | Pago por transferencia{% endblock %}
 
 {% block content %}
-<section class="card border-0 shadow-sm mb-4 overflow-hidden">
-  <div class="card-body p-4 p-lg-5">
+<section class="track-page">
+  <div class="order-status-card mb-4">
     <div class="row g-4 align-items-center">
       <div class="col-lg-8">
         <span class="badge bg-success mb-3">Pedido realizado correctamente</span>
-        <h1 class="display-6 fw-bold mb-3">Su número de pedido es:</h1>
-        <div class="d-inline-flex align-items-center gap-3 bg-light border rounded-4 px-4 py-3 mb-3">
-          <code id="codigoPedido" class="fs-3 fw-bold text-primary">{{ pedido.codigo_pedido }}</code>
-          <button type="button" class="btn btn-outline-primary btn-sm" id="copiarPedido">Copiar número de pedido</button>
+        <h1 class="track-title mb-3">Su número de pedido es:</h1>
+        <div class="order-code-box mb-3">
+          <code id="codigoPedido">{{ pedido.codigo_pedido }}</code>
+          <button type="button" class="btn btn-store-outline btn-sm" id="copiarPedido">Copiar número</button>
         </div>
         <div id="copiadoAviso" class="alert alert-success py-2 px-3 d-none" role="alert">Código copiado al portapapeles.</div>
         <p class="lead mb-2">Guarde su número de pedido. Lo necesitará para consultar el estado de su compra y para subir o revisar su comprobante de pago.</p>
-        <p class="text-muted mb-0">Para completar su compra, realice la transferencia bancaria por el monto indicado y luego suba el comprobante desde esta pantalla o desde la opción Consultar pedido.</p>
+        <p class="text-muted mb-0">Para completar su compra, realice la transferencia bancaria por el monto indicado y luego suba el comprobante desde esta pantalla o desde la opción Rastrear pedido.</p>
       </div>
       <div class="col-lg-4">
-        <div class="bg-primary text-white rounded-4 p-4 h-100">
+        <div class="payment-total-card">
           <p class="mb-1">Total a pagar</p>
           <h2 class="fw-bold">Q {{ pedido.total }}</h2>
           <hr class="border-light opacity-50">
-          <p class="mb-2">Pedido: <span class="badge bg-light text-primary">{{ pedido.get_estado_display }}</span></p>
-          <p class="mb-0">Pago: <span class="badge bg-warning text-dark">{{ pedido.get_estado_pago_display }}</span></p>
+          <p class="mb-2">Pedido <span class="store-status-badge {{ pedido.estado|pedido_badge_class }}">{{ pedido.get_estado_display }}</span></p>
+          <p class="mb-0">Pago <span class="store-status-badge {{ pedido.estado_pago|pago_badge_class }}">{{ pedido.get_estado_pago_display }}</span></p>
         </div>
       </div>
     </div>
   </div>
-</section>
 
-<div class="row g-4">
-  <div class="col-lg-6">
-    <div class="card border-0 shadow-sm h-100">
-      <div class="card-body">
+  <div class="row g-4">
+    <div class="col-lg-6">
+      <div class="order-summary-card h-100">
         <h4 class="fw-bold mb-3">Cuentas bancarias disponibles</h4>
         {% for cuenta in cuentas %}
-          <div class="border rounded-4 p-3 mb-3 bg-light">
+          <div class="bank-account-card mb-3">
             <h5 class="mb-1">{{ cuenta.banco }}</h5>
             <p class="mb-1"><strong>Nombre:</strong> {{ cuenta.nombre_cuenta }}</p>
             <p class="mb-1"><strong>Cuenta {{ cuenta.tipo_cuenta }}:</strong> {{ cuenta.numero_cuenta }}</p>
@@ -48,17 +47,15 @@
         {% endfor %}
       </div>
     </div>
-  </div>
-  <div class="col-lg-6">
-    <div class="card border-0 shadow-sm h-100">
-      <div class="card-body">
+    <div class="col-lg-6">
+      <div class="payment-upload-card h-100">
         <h4 class="fw-bold mb-3">Subir comprobante ahora</h4>
         {% if puede_subir_comprobante %}
-          <form method="post" enctype="multipart/form-data">
+          <form method="post" enctype="multipart/form-data" class="track-form">
             {% csrf_token %}
             <p class="text-muted">Adjunte el comprobante de transferencia. Aceptamos imagen o PDF.</p>
             {{ form.as_p }}
-            <button class="btn btn-primary w-100">Enviar comprobante</button>
+            <button class="btn btn-store-primary w-100">Enviar comprobante</button>
           </form>
         {% elif pedido.estado_pago == 'confirmado' %}
           <div class="alert alert-success mb-0">Su pago fue confirmado.</div>
@@ -68,26 +65,24 @@
       </div>
     </div>
   </div>
-</div>
 
-<div class="card border-0 shadow-sm mt-4">
-  <div class="card-body">
+  <div class="track-help-box mt-4">
     <h4 class="fw-bold">¿Cómo revisar mi pedido?</h4>
     <ol class="mb-4">
-      <li>Ingrese a la opción “Consultar pedido”.</li>
+      <li>Ingrese a la opción “Rastrear pedido”.</li>
       <li>Escriba su número de pedido.</li>
       <li>Ingrese el correo electrónico o teléfono que usó al realizar la compra.</li>
-      <li>Presione “Consultar”.</li>
+      <li>Presione “Consultar pedido”.</li>
       <li>Desde allí podrá ver el estado de su pedido, estado del pago y subir el comprobante si aún no lo ha enviado.</li>
     </ol>
     <div class="d-flex flex-wrap gap-2">
-      <button type="button" class="btn btn-outline-primary" id="copiarPedidoSecundario">Copiar número de pedido</button>
-      <a class="btn btn-primary" href="{% url 'tienda:consultar_pedido' %}">Consultar mi pedido</a>
-      <a class="btn btn-success" href="#id_comprobante_transferencia">Subir comprobante ahora</a>
-      <a class="btn btn-outline-secondary" href="{% url 'tienda:inicio' %}">Volver a la tienda</a>
+      <button type="button" class="btn btn-store-outline" id="copiarPedidoSecundario">Copiar número de pedido</button>
+      <a class="btn btn-store-primary" href="{% url 'tienda:consultar_pedido' %}">Rastrear mi pedido</a>
+      <a class="btn btn-whatsapp" href="https://wa.me/50242167103" target="_blank" rel="noopener">Contactar por WhatsApp</a>
+      <a class="btn btn-store-outline" href="{% url 'tienda:inicio' %}">Volver a la tienda</a>
     </div>
   </div>
-</div>
+</section>
 
 <script>
   function copiarCodigoPedido() {

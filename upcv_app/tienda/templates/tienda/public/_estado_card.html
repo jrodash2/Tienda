@@ -1,86 +1,102 @@
+{% load tienda_extras %}
 {% with pago=pedido.estado_pago %}
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-body p-4">
-    <div class="d-flex flex-wrap justify-content-between gap-3 align-items-start">
-      <div>
-        <span class="badge bg-primary mb-2">Datos del pedido</span>
-        <h2 class="fw-bold mb-1">Pedido {{ pedido.codigo_pedido }}</h2>
-        <p class="text-muted mb-0">Fecha: {{ pedido.fecha_creacion|date:'d/m/Y H:i' }}</p>
-      </div>
-      <div class="text-lg-end">
-        <p class="mb-2">Estado pedido: <span class="badge bg-secondary">{{ pedido.get_estado_display }}</span></p>
-        <p class="mb-0">Estado pago:
-          {% if pago == 'confirmado' %}
-            <span class="badge bg-success">{{ pedido.get_estado_pago_display }}</span>
-          {% elif pago == 'rechazado' %}
-            <span class="badge bg-danger">{{ pedido.get_estado_pago_display }}</span>
-          {% elif pago == 'comprobante_recibido' %}
-            <span class="badge bg-info text-dark">{{ pedido.get_estado_pago_display }}</span>
-          {% else %}
-            <span class="badge bg-warning text-dark">{{ pedido.get_estado_pago_display }}</span>
-          {% endif %}
-        </p>
+<div class="order-status-card mb-4">
+  <div class="d-flex flex-wrap justify-content-between gap-3 align-items-start">
+    <div>
+      <span class="badge bg-danger mb-2">Datos del pedido</span>
+      <h2 class="fw-bold mb-1">Pedido {{ pedido.codigo_pedido }}</h2>
+      <p class="text-muted mb-0">Fecha: {{ pedido.fecha_creacion|date:'d/m/Y H:i' }}</p>
+    </div>
+    <div class="text-lg-end">
+      <div class="mb-2">Estado pedido <span class="store-status-badge {{ pedido.estado|pedido_badge_class }}">{{ pedido.get_estado_display }}</span></div>
+      <div>Estado pago <span class="store-status-badge {{ pago|pago_badge_class }}">{{ pedido.get_estado_pago_display }}</span></div>
+    </div>
+  </div>
+  <div class="row g-3 mt-4">
+    <div class="col-md-4">
+      <div class="order-metric-card">
+        <span>Total</span>
+        <strong>Q {{ pedido.total }}</strong>
       </div>
     </div>
-
-    <hr>
-    {% if pago == 'confirmado' %}
-      <div class="alert alert-success">Su pago fue confirmado.</div>
-    {% elif pago == 'comprobante_recibido' %}
-      <div class="alert alert-info">Ya recibimos su comprobante. Su comprobante está en revisión.</div>
-    {% elif pago == 'rechazado' %}
-      <div class="alert alert-danger">El comprobante fue rechazado. Puede subir un nuevo comprobante.</div>
-      {% if pedido.observaciones_admin %}<div class="alert alert-warning"><strong>Observación:</strong> {{ pedido.observaciones_admin }}</div>{% endif %}
-    {% else %}
-      <div class="alert alert-warning">Aún no hemos recibido su comprobante de transferencia.</div>
-    {% endif %}
-
-    <div class="row g-4">
-      <div class="col-lg-6">
-        <h5 class="fw-bold">Datos del cliente</h5>
-        <p class="mb-1"><strong>Nombre:</strong> {{ pedido.cliente.nombre_completo }}</p>
-        <p class="mb-1"><strong>Teléfono:</strong> {{ pedido.cliente.telefono }}</p>
-        <p class="mb-0"><strong>Email:</strong> {{ pedido.cliente.email }}</p>
+    <div class="col-md-4">
+      <div class="order-metric-card">
+        <span>Subtotal</span>
+        <strong>Q {{ pedido.subtotal }}</strong>
       </div>
-      <div class="col-lg-6">
-        <h5 class="fw-bold">Resumen de pago</h5>
-        <p class="mb-1"><strong>Total:</strong> Q {{ pedido.total }}</p>
-        <p class="mb-1"><strong>Subtotal:</strong> Q {{ pedido.subtotal }}</p>
-        <p class="mb-0"><strong>Envío:</strong> Q {{ pedido.costo_envio }}</p>
+    </div>
+    <div class="col-md-4">
+      <div class="order-metric-card">
+        <span>Envío</span>
+        <strong>Q {{ pedido.costo_envio }}</strong>
       </div>
     </div>
   </div>
+
+  {% if pago == 'confirmado' %}
+    <div class="alert alert-success mt-4 mb-0">Su pago fue confirmado. Estamos avanzando con la preparación o entrega de su pedido.</div>
+  {% elif pago == 'comprobante_recibido' %}
+    <div class="alert alert-info mt-4 mb-0">Ya recibimos su comprobante. Su comprobante está en revisión.</div>
+  {% elif pago == 'rechazado' %}
+    <div class="alert alert-danger mt-4 mb-0">El comprobante fue rechazado. Puede subir un nuevo comprobante.</div>
+    {% if pedido.observaciones_admin %}<div class="alert alert-warning mt-3 mb-0"><strong>Observación:</strong> {{ pedido.observaciones_admin }}</div>{% endif %}
+  {% else %}
+    <div class="alert alert-warning mt-4 mb-0">Aún no hemos recibido su comprobante de transferencia.</div>
+  {% endif %}
 </div>
 
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-body p-4">
-    <h4 class="fw-bold">Productos comprados</h4>
-    <div class="table-responsive">
-      <table class="table align-middle">
-        <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio</th><th>Subtotal</th></tr></thead>
-        <tbody>
-          {% for d in pedido.detalles.all %}
-            <tr>
-              <td>{{ d.nombre_producto_snapshot }}<br><small class="text-muted">{{ d.codigo_sku_snapshot }}</small></td>
-              <td>{{ d.cantidad }}</td>
-              <td>Q {{ d.precio_unitario }}</td>
-              <td>Q {{ d.subtotal }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+<div class="row g-4 mb-4">
+  <div class="col-lg-5">
+    <div class="order-summary-card h-100">
+      <h4 class="fw-bold mb-3">Datos del cliente</h4>
+      <div class="order-info-list">
+        <p><span>Nombre</span><strong>{{ pedido.cliente.nombre_completo }}</strong></p>
+        <p><span>Teléfono</span><strong>{{ pedido.cliente.telefono }}</strong></p>
+        <p><span>Email</span><strong>{{ pedido.cliente.email }}</strong></p>
+        <p><span>Dirección</span><strong>{{ pedido.cliente.direccion }}</strong></p>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="order-summary-card h-100">
+      <h4 class="fw-bold mb-3">Productos del pedido</h4>
+      <div class="table-responsive">
+        <table class="table align-middle store-order-table mb-0">
+          <thead><tr><th>Producto</th><th>Cantidad</th><th>Precio</th><th>Subtotal</th></tr></thead>
+          <tbody>
+            {% for d in pedido.detalles.all %}
+              <tr>
+                <td>
+                  <div class="d-flex align-items-center gap-3">
+                    {% if d.producto and d.producto.imagen_destacada %}
+                      <img class="order-product-thumb" src="{{ d.producto.imagen_destacada.url }}" alt="{{ d.nombre_producto_snapshot }}">
+                    {% else %}
+                      <div class="order-product-thumb placeholder">—</div>
+                    {% endif %}
+                    <div><strong>{{ d.nombre_producto_snapshot }}</strong><br><small class="text-muted">{{ d.codigo_sku_snapshot }}</small></div>
+                  </div>
+                </td>
+                <td>{{ d.cantidad }}</td>
+                <td>Q {{ d.precio_unitario }}</td>
+                <td><strong>Q {{ d.subtotal }}</strong></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
 
 <div class="row g-4">
   <div class="col-lg-6">
-    <div class="card border-0 shadow-sm h-100">
-      <div class="card-body p-4">
-        <h4 class="fw-bold">Pago por transferencia</h4>
-        <p class="text-muted">Total a transferir: <strong>Q {{ pedido.total }}</strong></p>
+    <div class="order-summary-card h-100">
+      <h4 class="fw-bold mb-2">Pago por transferencia</h4>
+      <p class="text-muted">Total a pagar: <strong>Q {{ pedido.total }}</strong></p>
+      {% if puede_subir_comprobante %}
+        <p class="mb-3">Realice la transferencia y suba su comprobante para que podamos validar el pago.</p>
         {% for cuenta in cuentas %}
-          <div class="border rounded-4 p-3 mb-3 bg-light">
+          <div class="bank-account-card mb-3">
             <h5 class="mb-1">{{ cuenta.banco }}</h5>
             <p class="mb-1"><strong>Nombre:</strong> {{ cuenta.nombre_cuenta }}</p>
             <p class="mb-1"><strong>Cuenta {{ cuenta.tipo_cuenta }}:</strong> {{ cuenta.numero_cuenta }}</p>
@@ -90,36 +106,44 @@
         {% empty %}
           <div class="alert alert-warning">Aún no hay cuentas bancarias configuradas.</div>
         {% endfor %}
-      </div>
+      {% elif pago == 'confirmado' %}
+        <div class="alert alert-success mb-0">Su pago ya fue confirmado.</div>
+      {% else %}
+        <div class="alert alert-info mb-0">Su comprobante está en revisión. Le notificaremos cuando sea confirmado.</div>
+      {% endif %}
     </div>
   </div>
   <div class="col-lg-6">
-    <div class="card border-0 shadow-sm h-100">
-      <div class="card-body p-4">
-        <h4 class="fw-bold">Comprobante</h4>
-        {% if pedido.comprobante_transferencia and pago != 'rechazado' %}
-          <p class="text-muted">Ya recibimos su comprobante.</p>
-          <a class="btn btn-outline-primary mb-3" href="{{ pedido.comprobante_transferencia.url }}" target="_blank" rel="noopener">Ver comprobante</a>
-        {% endif %}
-
-        {% if puede_subir_comprobante and contacto_consulta %}
-          <p class="text-muted">Adjunte un comprobante en imagen o PDF. Validaremos nuevamente sus datos antes de guardarlo.</p>
-          <form method="post" enctype="multipart/form-data" action="{% url 'tienda:consultar_pedido' %}">
-            {% csrf_token %}
-            <input type="hidden" name="accion" value="subir_comprobante">
-            <input type="hidden" name="codigo_pedido" value="{{ pedido.codigo_pedido }}">
-            <input type="hidden" name="contacto" value="{{ contacto_consulta }}">
-            {{ form.as_p }}
-            <button class="btn btn-primary w-100">Subir comprobante</button>
-          </form>
-        {% elif puede_subir_comprobante %}
-          <a class="btn btn-primary" href="{% url 'tienda:pago_transferencia' pedido.codigo_pedido %}">Subir comprobante ahora</a>
-        {% elif pago == 'confirmado' %}
-          <div class="alert alert-success mb-0">Su pago fue confirmado.</div>
+    <div class="payment-upload-card h-100">
+      <h4 class="fw-bold mb-3">Comprobante</h4>
+      {% if pedido.comprobante_transferencia and pago != 'rechazado' %}
+        <div class="alert alert-info">Comprobante recibido. Estado actual: <span class="store-status-badge {{ pago|pago_badge_class }}">{{ pedido.get_estado_pago_display }}</span></div>
+        {% if pedido.comprobante_transferencia|comprobante_es_imagen %}
+          <a href="{{ pedido.comprobante_transferencia.url }}" target="_blank" rel="noopener">
+            <img class="payment-proof-preview mb-3" src="{{ pedido.comprobante_transferencia.url }}" alt="Comprobante {{ pedido.codigo_pedido }}">
+          </a>
         {% else %}
-          <div class="alert alert-info mb-0">Su comprobante está en revisión.</div>
+          <a class="btn btn-store-outline mb-3" href="{{ pedido.comprobante_transferencia.url }}" target="_blank" rel="noopener">Ver comprobante</a>
         {% endif %}
-      </div>
+      {% endif %}
+
+      {% if puede_subir_comprobante and contacto_consulta %}
+        <p class="text-muted">Adjunte un comprobante en imagen o PDF. Validaremos nuevamente sus datos antes de guardarlo.</p>
+        <form method="post" enctype="multipart/form-data" action="{% url 'tienda:consultar_pedido' %}" class="track-form">
+          {% csrf_token %}
+          <input type="hidden" name="accion" value="subir_comprobante">
+          <input type="hidden" name="codigo_pedido" value="{{ pedido.codigo_pedido }}">
+          <input type="hidden" name="contacto" value="{{ contacto_consulta }}">
+          {{ form.as_p }}
+          <button class="btn btn-store-primary w-100">Subir comprobante</button>
+        </form>
+      {% elif puede_subir_comprobante %}
+        <a class="btn btn-store-primary" href="{% url 'tienda:pago_transferencia' pedido.codigo_pedido %}">Subir comprobante ahora</a>
+      {% elif pago == 'confirmado' %}
+        <div class="alert alert-success mb-0">Su pago fue confirmado.</div>
+      {% else %}
+        <div class="alert alert-info mb-0">Su comprobante está en revisión.</div>
+      {% endif %}
     </div>
   </div>
 </div>
