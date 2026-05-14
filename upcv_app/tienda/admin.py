@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import CategoriaProducto, MarcaProducto, Producto, ImagenProducto, ClientePedido, Pedido, DetallePedido, CuentaBancaria
+from .models import CategoriaProducto, MarcaProducto, Producto, ImagenProducto, ClientePedido, Pedido, DetallePedido, CuentaBancaria, UbicacionTienda
 
 
 class ImagenProductoInline(admin.TabularInline):
@@ -26,7 +26,7 @@ class MarcaProductoAdmin(admin.ModelAdmin):
 
 @admin.register(Producto)
 class ProductoAdmin(admin.ModelAdmin):
-    list_display = ('codigo_sku', 'nombre', 'categoria', 'marca', 'precio', 'precio_oferta', 'stock', 'activo', 'destacado')
+    list_display = ('codigo_sku', 'nombre', 'categoria', 'marca', 'precio', 'precio_oferta', 'costo_envio', 'stock', 'activo', 'destacado')
     list_filter = ('activo', 'destacado', 'nuevo', 'permite_compra', 'categoria', 'marca')
     search_fields = ('nombre', 'codigo_sku', 'descripcion_corta')
     prepopulated_fields = {'slug': ('nombre',)}
@@ -43,7 +43,7 @@ class ImagenProductoAdmin(admin.ModelAdmin):
 class DetallePedidoInline(admin.TabularInline):
     model = DetallePedido
     extra = 0
-    readonly_fields = ('producto', 'nombre_producto_snapshot', 'codigo_sku_snapshot', 'precio_unitario', 'cantidad', 'subtotal')
+    readonly_fields = ('producto', 'nombre_producto_snapshot', 'codigo_sku_snapshot', 'precio_unitario', 'cantidad', 'subtotal', 'costo_envio_unitario', 'costo_envio_total')
 
 
 @admin.register(ClientePedido)
@@ -54,16 +54,16 @@ class ClientePedidoAdmin(admin.ModelAdmin):
 
 @admin.register(Pedido)
 class PedidoAdmin(admin.ModelAdmin):
-    list_display = ('codigo_pedido', 'cliente', 'total', 'estado', 'estado_pago', 'metodo_pago', 'fecha_creacion')
-    list_filter = ('estado', 'estado_pago', 'metodo_pago', 'fecha_creacion')
+    list_display = ('codigo_pedido', 'cliente', 'total', 'tipo_entrega', 'estado', 'estado_pago', 'metodo_pago', 'fecha_creacion')
+    list_filter = ('tipo_entrega', 'estado', 'estado_pago', 'metodo_pago', 'fecha_creacion')
     search_fields = ('codigo_pedido', 'cliente__nombres', 'cliente__apellidos', 'cliente__email', 'cliente__telefono')
-    readonly_fields = ('codigo_pedido', 'fecha_creacion', 'fecha_actualizacion')
+    readonly_fields = ('codigo_pedido', 'correo_confirmacion_enviado', 'fecha_correo_confirmacion', 'fecha_creacion', 'fecha_actualizacion')
     inlines = [DetallePedidoInline]
 
 
 @admin.register(DetallePedido)
 class DetallePedidoAdmin(admin.ModelAdmin):
-    list_display = ('pedido', 'nombre_producto_snapshot', 'cantidad', 'precio_unitario', 'subtotal')
+    list_display = ('pedido', 'nombre_producto_snapshot', 'cantidad', 'precio_unitario', 'subtotal', 'costo_envio_total')
     search_fields = ('pedido__codigo_pedido', 'nombre_producto_snapshot', 'codigo_sku_snapshot')
 
 
@@ -72,3 +72,10 @@ class CuentaBancariaAdmin(admin.ModelAdmin):
     list_display = ('banco', 'nombre_cuenta', 'numero_cuenta', 'tipo_cuenta', 'moneda', 'activo', 'orden')
     list_filter = ('activo', 'moneda')
     search_fields = ('banco', 'nombre_cuenta', 'numero_cuenta')
+
+
+@admin.register(UbicacionTienda)
+class UbicacionTiendaAdmin(admin.ModelAdmin):
+    list_display = ('nombre', 'departamento', 'municipio', 'telefono', 'activo', 'orden')
+    list_filter = ('activo', 'departamento')
+    search_fields = ('nombre', 'direccion', 'municipio', 'departamento')

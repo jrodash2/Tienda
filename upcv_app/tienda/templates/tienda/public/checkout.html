@@ -1,1 +1,138 @@
-{% extends 'tienda/public/base_tienda.html' %}{% block title %}Checkout{% endblock %}{% block content %}<h1 class="store-section-title mb-4">Finalizar compra</h1><div class="row g-4"><div class="col-lg-7"><form method="post" class="store-card p-4">{% csrf_token %}<h4>Datos personales y entrega</h4><div class="alert alert-info">El pago se realizará por transferencia bancaria después de confirmar el pedido.</div>{{ form.as_p }}<button class="btn btn-danger btn-lg w-100">Confirmar pedido</button></form></div><div class="col-lg-5"><div class="store-card store-summary p-4"><h4>Resumen del pedido</h4>{% for item in items %}<div class="d-flex justify-content-between gap-3 mb-2"><span>{{ item.cantidad }} x {{ item.producto.nombre }}</span><strong>Q {{ item.subtotal }}</strong></div>{% endfor %}<hr><div class="d-flex justify-content-between"><span>Subtotal</span><b>Q {{ subtotal }}</b></div><div class="d-flex justify-content-between"><span>Envío</span><b>Q {{ envio }}</b></div><div class="d-flex justify-content-between fs-4 mt-2"><span>Total</span><b>Q {{ total }}</b></div></div></div></div>{% endblock %}
+{% extends 'tienda/public/base_tienda.html' %}
+{% block title %}Checkout{% endblock %}
+{% block content %}
+<h1 class="store-section-title mb-4">Finalizar compra</h1>
+<form method="post" id="checkoutForm">
+  <div id="checkout-summary" class="d-none" data-subtotal="{{ subtotal_checkout }}" data-envio="{{ envio_checkout }}" data-total-envio="{{ total_con_envio_checkout }}" data-total-recoger="{{ total_recoger_checkout }}"></div>
+  {% csrf_token %}
+  <div class="row g-4">
+    <div class="col-lg-7">
+      <div class="store-card p-4 mb-4">
+        <h4 class="fw-bold mb-3">Datos del cliente</h4>
+        <div class="alert alert-info">El pago se realizará por transferencia bancaria después de confirmar el pedido.</div>
+        <div class="row g-3">
+          <div class="col-md-6"><label class="form-label">Nombres</label>{{ form.nombres }}{{ form.nombres.errors }}</div>
+          <div class="col-md-6"><label class="form-label">Apellidos</label>{{ form.apellidos }}{{ form.apellidos.errors }}</div>
+          <div class="col-md-6"><label class="form-label">Teléfono</label>{{ form.telefono }}{{ form.telefono.errors }}</div>
+          <div class="col-md-6"><label class="form-label">Email</label>{{ form.email }}{{ form.email.errors }}</div>
+          <div class="col-md-6"><label class="form-label">NIT</label>{{ form.nit }}{{ form.nit.errors }}</div>
+          <div class="col-12"><label class="form-label">Observaciones</label>{{ form.observaciones }}{{ form.observaciones.errors }}</div>
+        </div>
+      </div>
+
+      <div class="store-card p-4 mb-4">
+        <h4 class="fw-bold mb-3">Forma de entrega</h4>
+        {{ form.tipo_entrega.errors }}
+        <div class="delivery-options mb-4">
+          <label class="delivery-option-card" data-delivery-card>
+            <input type="radio" name="tipo_entrega" value="envio_domicilio" {% if form.tipo_entrega.value != 'recoger_tienda' %}checked{% endif %}>
+            <strong>Envío a domicilio</strong>
+            <span>Reciba su pedido en la dirección indicada.</span>
+          </label>
+          <label class="delivery-option-card" data-delivery-card>
+            <input type="radio" name="tipo_entrega" value="recoger_tienda" {% if form.tipo_entrega.value == 'recoger_tienda' %}checked{% endif %}>
+            <strong>Recoger en tienda</strong>
+            <span>Retire su pedido en una de nuestras ubicaciones disponibles.</span>
+          </label>
+        </div>
+
+        <div id="deliveryAddressBlock">
+          <h5 class="fw-bold">Dirección de entrega</h5>
+          <div class="mb-3"><label class="form-label">Dirección completa</label>{{ form.direccion }}{{ form.direccion.errors }}</div>
+          <div class="row g-3">
+            <div class="col-md-6"><label class="form-label">Departamento</label>{{ form.departamento }}{{ form.departamento.errors }}</div>
+            <div class="col-md-6"><label class="form-label">Municipio</label>{{ form.municipio }}{{ form.municipio.errors }}</div>
+          </div>
+        </div>
+
+        <div id="pickupLocationsBlock" class="d-none">
+          <h5 class="fw-bold">Seleccione ubicación de tienda</h5>
+          {{ form.ubicacion_recogida.errors }}
+          <div class="row g-3">
+            {% for ubicacion in ubicaciones %}
+              <div class="col-md-6">
+                <label class="pickup-location-card">
+                  <input type="radio" name="ubicacion_recogida" value="{{ ubicacion.id }}" {% if form.ubicacion_recogida.value|stringformat:'s' == ubicacion.id|stringformat:'s' %}checked{% endif %}>
+                  <strong>{{ ubicacion.nombre }}</strong>
+                  <span>{{ ubicacion.direccion }}</span>
+                  <small>{{ ubicacion.municipio|default:'' }}{% if ubicacion.municipio and ubicacion.departamento %}, {% endif %}{{ ubicacion.departamento|default:'' }}</small>
+                  {% if ubicacion.telefono %}<small>Tel. {{ ubicacion.telefono }}</small>{% endif %}
+                  {% if ubicacion.horario %}<small>{{ ubicacion.horario }}</small>{% endif %}
+                  {% if ubicacion.google_maps_url %}<a href="{{ ubicacion.google_maps_url }}" target="_blank" rel="noopener">Ver en Google Maps</a>{% endif %}
+                </label>
+              </div>
+            {% empty %}
+              <div class="col-12"><div class="alert alert-warning">No hay ubicaciones activas para recoger en tienda.</div></div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="checkout-summary-box store-summary">
+        <h4 class="fw-bold mb-3">Resumen del pedido</h4>
+        {% for item in items %}
+          <div class="d-flex justify-content-between gap-3 mb-2"><span>{{ item.cantidad }} x {{ item.producto.nombre }}</span><strong>Q {{ item.subtotal }}</strong></div>
+        {% endfor %}
+        <hr>
+        <div class="d-flex justify-content-between"><span>Subtotal productos</span><b><span id="checkout-subtotal">Q {{ subtotal }}</span></b></div>
+        <div class="d-flex justify-content-between shipping-cost-row"><span>Envío</span><b><span id="checkout-envio">Q {{ envio }}</span></b></div>
+        <div class="small text-muted mt-1" id="shippingHelp">El envío se calcula según los productos del carrito.</div>
+        <div class="d-flex justify-content-between fs-4 mt-3"><span>Total</span><b><span id="checkout-total">Q {{ total }}</span></b></div>
+        <button class="btn btn-danger btn-lg w-100 mt-3">Confirmar pedido</button>
+        <a class="btn btn-outline-dark w-100 mt-2" href="{% url 'tienda:carrito' %}">Volver al carrito</a>
+      </div>
+    </div>
+  </div>
+</form>
+<script>
+(function(){
+  const form = document.getElementById('checkoutForm');
+  const summary = document.getElementById('checkout-summary');
+  if (!form || !summary) return;
+
+  function parseMoney(value) {
+    if (value === null || value === undefined || value === '') return 0;
+    value = String(value).replace('Q', '').replace(/\s/g, '').replace(',', '.');
+    const number = Number.parseFloat(value);
+    return Number.isFinite(number) ? number : 0;
+  }
+
+  function formatGTQ(value) {
+    const number = Number.isFinite(value) ? value : 0;
+    return 'Q ' + number.toLocaleString('es-GT', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  const subtotal = parseMoney(summary.dataset.subtotal);
+  const envioBase = parseMoney(summary.dataset.envio);
+  const address = document.getElementById('deliveryAddressBlock');
+  const pickup = document.getElementById('pickupLocationsBlock');
+  const subtotalNode = document.getElementById('checkout-subtotal');
+  const shippingNode = document.getElementById('checkout-envio');
+  const totalNode = document.getElementById('checkout-total');
+  const help = document.getElementById('shippingHelp');
+
+  function actualizarResumenEntrega(){
+    const selected = form.querySelector('input[name="tipo_entrega"]:checked')?.value || 'envio_domicilio';
+    const isPickup = selected === 'recoger_tienda';
+    const envio = isPickup ? 0 : envioBase;
+    const total = subtotal + envio;
+
+    if (address) address.classList.toggle('d-none', isPickup);
+    if (pickup) pickup.classList.toggle('d-none', !isPickup);
+    if (subtotalNode) subtotalNode.textContent = formatGTQ(subtotal);
+    if (shippingNode) shippingNode.textContent = formatGTQ(envio);
+    if (totalNode) totalNode.textContent = formatGTQ(total);
+    if (help) help.textContent = isPickup ? 'No se cobrará envío porque seleccionó recoger en tienda.' : 'El envío se calcula según los productos del carrito.';
+    form.querySelectorAll('[data-delivery-card]').forEach(card => card.classList.toggle('active', card.querySelector('input').checked));
+  }
+
+  form.querySelectorAll('input[name="tipo_entrega"]').forEach(input => input.addEventListener('change', actualizarResumenEntrega));
+  actualizarResumenEntrega();
+})();
+</script>
+{% endblock %}

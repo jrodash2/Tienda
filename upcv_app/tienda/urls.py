@@ -33,6 +33,9 @@ urlpatterns = [
     # Alias conservado para enlaces internos generados antes de estandarizar la ruta con /detalle/.
     path('admin/pedidos/<int:pk>/', views.admin_pedido_detalle, name='admin_pedido_detalle_simple'),
     path('admin/pagos-pendientes/', views.admin_pagos_pendientes, name='admin_pagos_pendientes'),
+    path('admin/ubicaciones/', views.admin_ubicaciones_tienda, name='admin_ubicaciones_tienda'),
+    path('admin/ubicaciones/crear/', views.admin_ubicacion_tienda_form, name='admin_ubicacion_tienda_crear'),
+    path('admin/ubicaciones/<int:pk>/editar/', views.admin_ubicacion_tienda_form, name='admin_ubicacion_tienda_editar'),
     path('admin/cuentas-bancarias/', views.admin_cuentas, name='admin_cuentas_bancarias'),
     path('admin/cuentas-bancarias/crear/', views.admin_cuenta_form, name='admin_cuenta_bancaria_crear'),
     path('admin/cuentas-bancarias/<int:pk>/editar/', views.admin_cuenta_form, name='admin_cuenta_bancaria_editar'),

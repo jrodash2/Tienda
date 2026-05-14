@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Confirmación de pedido {{ pedido.codigo_pedido }}</title>
+</head>
+<body style="margin:0;padding:0;background:#f5f7fb;font-family:Arial,Helvetica,sans-serif;color:#111827;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f5f7fb;padding:24px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="680" cellspacing="0" cellpadding="0" style="max-width:680px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #e5e7eb;">
+          <tr>
+            <td style="background:#ed1c24;color:#ffffff;padding:24px 28px;">
+              <h1 style="margin:0;font-size:24px;">E-Shop El Progreso</h1>
+              <p style="margin:8px 0 0;font-size:16px;">Gracias por su pedido</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px;">
+              <p style="font-size:16px;margin:0 0 18px;">Hola {{ cliente.nombres }}, hemos recibido su pedido correctamente.</p>
+
+              <div style="background:#fff7f7;border:1px solid #fecaca;border-radius:16px;padding:18px;margin-bottom:22px;">
+                <p style="margin:0;color:#6b7280;font-size:13px;text-transform:uppercase;font-weight:bold;">Número de pedido</p>
+                <p style="margin:6px 0 8px;font-size:28px;font-weight:bold;color:#ed1c24;">{{ pedido.codigo_pedido }}</p>
+                <p style="margin:0;color:#374151;">Guarde este número. Lo necesitará para consultar el estado de su compra y para subir o revisar su comprobante de pago.</p>
+              </div>
+
+              <h2 style="font-size:20px;margin:0 0 12px;">Resumen del pedido</h2>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:22px;">
+                <tr><td style="padding:8px;border-bottom:1px solid #eef2f7;color:#6b7280;">Fecha</td><td style="padding:8px;border-bottom:1px solid #eef2f7;text-align:right;">{{ pedido.fecha_creacion|date:'d/m/Y H:i' }}</td></tr>
+                <tr><td style="padding:8px;border-bottom:1px solid #eef2f7;color:#6b7280;">Estado del pedido</td><td style="padding:8px;border-bottom:1px solid #eef2f7;text-align:right;">{{ pedido.get_estado_display }}</td></tr>
+                <tr><td style="padding:8px;border-bottom:1px solid #eef2f7;color:#6b7280;">Estado del pago</td><td style="padding:8px;border-bottom:1px solid #eef2f7;text-align:right;">{{ pedido.get_estado_pago_display }}</td></tr>
+                <tr><td style="padding:8px;border-bottom:1px solid #eef2f7;color:#6b7280;">Subtotal</td><td style="padding:8px;border-bottom:1px solid #eef2f7;text-align:right;">Q {{ pedido.subtotal }}</td></tr>
+                <tr><td style="padding:8px;border-bottom:1px solid #eef2f7;color:#6b7280;">Envío</td><td style="padding:8px;border-bottom:1px solid #eef2f7;text-align:right;">Q {{ pedido.costo_envio }}</td></tr>
+                <tr><td style="padding:10px 8px;font-weight:bold;">Total a pagar</td><td style="padding:10px 8px;text-align:right;font-weight:bold;color:#ed1c24;font-size:18px;">Q {{ pedido.total }}</td></tr>
+              </table>
+
+              <h2 style="font-size:20px;margin:0 0 12px;">Forma de entrega</h2>
+              <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:16px;padding:16px;margin-bottom:22px;">
+                {% if pedido.tipo_entrega == 'recoger_tienda' %}
+                  <p style="margin:0 0 8px;"><strong>Recoger en tienda</strong></p>
+                  {% if pedido.ubicacion_recogida %}
+                    <p style="margin:0 0 6px;"><strong>Ubicación:</strong> {{ pedido.ubicacion_recogida.nombre }}</p>
+                    <p style="margin:0 0 6px;"><strong>Dirección:</strong> {{ pedido.ubicacion_recogida.direccion }}</p>
+                    {% if pedido.ubicacion_recogida.horario %}<p style="margin:0 0 6px;"><strong>Horario:</strong> {{ pedido.ubicacion_recogida.horario }}</p>{% endif %}
+                    {% if pedido.ubicacion_recogida.telefono %}<p style="margin:0 0 6px;"><strong>Teléfono:</strong> {{ pedido.ubicacion_recogida.telefono }}</p>{% endif %}
+                    {% if pedido.ubicacion_recogida.google_maps_url %}<p style="margin:0;"><a href="{{ pedido.ubicacion_recogida.google_maps_url }}" style="color:#ed1c24;">Ver en Google Maps</a></p>{% endif %}
+                  {% endif %}
+                {% else %}
+                  <p style="margin:0 0 8px;"><strong>Envío a domicilio</strong></p>
+                  <p style="margin:0 0 6px;"><strong>Dirección:</strong> {{ pedido.direccion_entrega|default:pedido.cliente.direccion }}</p>
+                  <p style="margin:0 0 6px;"><strong>Departamento:</strong> {{ pedido.departamento_entrega|default:pedido.cliente.departamento }}</p>
+                  <p style="margin:0 0 6px;"><strong>Municipio:</strong> {{ pedido.municipio_entrega|default:pedido.cliente.municipio }}</p>
+                  <p style="margin:0;"><strong>Costo de envío:</strong> Q {{ pedido.costo_envio }}</p>
+                {% endif %}
+              </div>
+
+              <h2 style="font-size:20px;margin:0 0 12px;">Productos</h2>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:22px;">
+                <thead>
+                  <tr style="background:#f9fafb;"><th align="left" style="padding:10px;border-bottom:1px solid #e5e7eb;">Producto</th><th align="center" style="padding:10px;border-bottom:1px solid #e5e7eb;">Cant.</th><th align="right" style="padding:10px;border-bottom:1px solid #e5e7eb;">Precio</th><th align="right" style="padding:10px;border-bottom:1px solid #e5e7eb;">Subtotal</th></tr>
+                </thead>
+                <tbody>
+                  {% for detalle in detalles %}
+                    <tr><td style="padding:10px;border-bottom:1px solid #eef2f7;">{{ detalle.nombre_producto_snapshot }}<br><span style="color:#6b7280;font-size:12px;">{{ detalle.codigo_sku_snapshot }}</span></td><td align="center" style="padding:10px;border-bottom:1px solid #eef2f7;">{{ detalle.cantidad }}</td><td align="right" style="padding:10px;border-bottom:1px solid #eef2f7;">Q {{ detalle.precio_unitario }}</td><td align="right" style="padding:10px;border-bottom:1px solid #eef2f7;">Q {{ detalle.subtotal }}</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+
+              <h2 style="font-size:20px;margin:0 0 12px;">Pago por transferencia</h2>
+              <p style="margin:0 0 12px;">Total a transferir: <strong>Q {{ pedido.total }}</strong></p>
+              {% if cuentas_bancarias %}
+                {% for cuenta in cuentas_bancarias %}
+                  <div style="border:1px solid #e5e7eb;border-radius:14px;padding:14px;margin-bottom:10px;background:#f9fafb;">
+                    <p style="margin:0 0 6px;font-weight:bold;">{{ cuenta.banco }}</p>
+                    <p style="margin:0 0 4px;"><strong>Nombre:</strong> {{ cuenta.nombre_cuenta }}</p>
+                    <p style="margin:0 0 4px;"><strong>Cuenta {{ cuenta.tipo_cuenta }}:</strong> {{ cuenta.numero_cuenta }}</p>
+                    <p style="margin:0 0 4px;"><strong>Moneda:</strong> {{ cuenta.moneda }}</p>
+                    {% if cuenta.instrucciones %}<p style="margin:0;color:#6b7280;">{{ cuenta.instrucciones }}</p>{% endif %}
+                  </div>
+                {% endfor %}
+              {% else %}
+                <p style="background:#fef3c7;border:1px solid #fde68a;border-radius:12px;padding:12px;">No hay cuentas bancarias activas configuradas. Comuníquese con la tienda para recibir instrucciones de pago.</p>
+              {% endif %}
+
+              <h2 style="font-size:20px;margin:20px 0 12px;">¿Cómo subir su comprobante?</h2>
+              <ol style="padding-left:22px;line-height:1.6;">
+                <li>Realice la transferencia bancaria por el total indicado.</li>
+                <li>Tome foto o descargue el comprobante.</li>
+                <li>Ingrese a “Rastrear pedido”.</li>
+                <li>Escriba su número de pedido y el correo o teléfono usado.</li>
+                <li>Suba el comprobante.</li>
+                <li>El administrador revisará su pago y actualizará el estado del pedido.</li>
+              </ol>
+              <p style="margin:18px 0;">
+                <a href="{{ pago_url }}" style="background:#ed1c24;color:#ffffff;text-decoration:none;border-radius:12px;padding:12px 18px;display:inline-block;font-weight:bold;">Subir comprobante</a>
+                <a href="{{ rastreo_url }}" style="background:#ffffff;color:#ed1c24;text-decoration:none;border:1px solid #ed1c24;border-radius:12px;padding:11px 18px;display:inline-block;font-weight:bold;margin-left:8px;">Rastrear pedido</a>
+              </p>
+              <p style="color:#6b7280;margin:0;">Gracias por comprar en {{ site_name }}.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

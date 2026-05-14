@@ -8,12 +8,13 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from almacen_app.utils import grupo_requerido
-from .cart import add_to_cart as session_add, cart_items, clear_cart, remove_from_cart as session_remove, update_cart as session_update
+from .cart import add_to_cart as session_add, calcular_envio_items, cart_items, clear_cart, remove_from_cart as session_remove, update_cart as session_update
 from .forms import (
     CambiarEstadoPedidoForm, CategoriaProductoForm, CheckoutForm, ComprobanteTransferenciaForm,
-    CuentaBancariaForm, MarcaProductoForm, ProductoForm, RechazarPagoForm,
+    CuentaBancariaForm, MarcaProductoForm, ProductoForm, RechazarPagoForm, UbicacionTiendaForm,
 )
-from .models import CategoriaProducto, ClientePedido, CuentaBancaria, DetallePedido, ImagenProducto, MarcaProducto, Pedido, Producto
+from .models import CategoriaProducto, ClientePedido, CuentaBancaria, DetallePedido, ImagenProducto, MarcaProducto, Pedido, Producto, UbicacionTienda
+from .services.email_service import programar_correo_confirmacion_pedido
 
 ENVIO_DEFAULT = Decimal('0.00')
 
@@ -31,45 +32,73 @@ def _validar_imagen_producto(archivo):
     return ''
 
 
+def _asignar_principal_si_hace_falta(producto):
+    imagenes = producto.imagenes.all()
+    principal_activa = imagenes.filter(activo=True, principal=True).order_by('orden', 'id').first()
+    if principal_activa:
+        imagenes.filter(principal=True).exclude(pk=principal_activa.pk).update(principal=False)
+        return principal_activa
+
+    imagenes.filter(principal=True).update(principal=False)
+    primera_activa = imagenes.filter(activo=True).order_by('orden', 'id').first()
+    if primera_activa:
+        primera_activa.principal = True
+        primera_activa.save(update_fields=['principal'])
+    return primera_activa
+
+
 def _procesar_imagenes_producto(request, producto):
-    for archivo in request.FILES.getlist('imagenes'):
+    imagenes_actuales = list(producto.imagenes.all())
+    principal_id = request.POST.get('imagen_principal_id')
+
+    for imagen in imagenes_actuales:
+        imagen.activo = f'imagen_activa_{imagen.pk}' in request.POST
+        orden = request.POST.get(f'imagen_orden_{imagen.pk}', '0')
+        try:
+            imagen.orden = max(0, int(orden or 0))
+        except (TypeError, ValueError):
+            imagen.orden = 0
+        imagen.alt = request.POST.get(f'imagen_alt_{imagen.pk}', '')
+        imagen.principal = bool(principal_id and str(imagen.pk) == str(principal_id))
+        if imagen.principal:
+            imagen.activo = True
+        imagen.save()
+
+    _asignar_principal_si_hace_falta(producto)
+
+    base_orden = producto.imagenes.count()
+    for index, archivo in enumerate(request.FILES.getlist('imagenes')):
         error = _validar_imagen_producto(archivo)
         if error:
             messages.warning(request, f'{archivo.name}: {error}')
             continue
-        es_principal = not producto.imagenes.filter(activo=True, principal=True).exists() and not producto.imagen_principal
+        es_principal = not producto.imagenes.filter(activo=True, principal=True).exists()
         ImagenProducto.objects.create(
             producto=producto,
             imagen=archivo,
             alt=producto.nombre,
-            orden=producto.imagenes.count(),
+            orden=base_orden + index,
+            activo=True,
             principal=es_principal,
         )
-    principal_id = request.POST.get('imagen_principal_galeria')
-    if principal_id:
-        imagen = producto.imagenes.filter(pk=principal_id).first()
-        if imagen:
-            imagen.principal = True
-            imagen.activo = True
-            imagen.save()
-    for imagen in producto.imagenes.all():
-        alt = request.POST.get(f'imagen_alt_{imagen.pk}')
-        orden = request.POST.get(f'imagen_orden_{imagen.pk}')
-        activo = request.POST.get(f'imagen_activo_{imagen.pk}') == 'on'
-        changed = False
-        if alt is not None and imagen.alt != alt:
-            imagen.alt = alt
-            changed = True
-        if orden is not None and orden.isdigit() and imagen.orden != int(orden):
-            imagen.orden = int(orden)
-            changed = True
-        if imagen.activo != activo:
-            imagen.activo = activo
-            changed = True
-        if changed:
-            imagen.save()
+
+    _asignar_principal_si_hace_falta(producto)
 
 
+def _activar_imagen_producto(producto, imagen):
+    imagen.activo = True
+    imagen.save(update_fields=['activo'])
+    if not producto.imagenes.filter(activo=True, principal=True).exists():
+        imagen.principal = True
+        imagen.save(update_fields=['principal'])
+    _asignar_principal_si_hace_falta(producto)
+
+
+def _desactivar_imagen_producto(producto, imagen):
+    imagen.activo = False
+    imagen.principal = False
+    imagen.save(update_fields=['activo', 'principal'])
+    _asignar_principal_si_hace_falta(producto)
 
 def tienda_inicio(request):
     productos = Producto.objects.filter(activo=True, mostrar_en_catalogo=True).select_related('categoria', 'marca')
@@ -142,7 +171,8 @@ def agregar_carrito(request, producto_id):
 
 def carrito(request):
     items, subtotal = cart_items(request)
-    return render(request, 'tienda/public/carrito.html', {'items': items, 'subtotal': subtotal, 'total': subtotal + ENVIO_DEFAULT})
+    envio_estimado = calcular_envio_items(items)
+    return render(request, 'tienda/public/carrito.html', {'items': items, 'subtotal': subtotal, 'envio_estimado': envio_estimado, 'total': subtotal + ENVIO_DEFAULT})
 
 
 @require_POST
@@ -164,49 +194,121 @@ def checkout(request):
     if not items:
         messages.warning(request, 'Tu carrito está vacío.')
         return redirect('tienda:catalogo')
-    total = subtotal + ENVIO_DEFAULT
+
+    envio_estimado = calcular_envio_items(items)
+    total_con_envio = subtotal + envio_estimado
+    total_recoger = subtotal
+    tipo_seleccionado = request.POST.get('tipo_entrega', Pedido.TipoEntrega.ENVIO_DOMICILIO)
+    envio_vista = envio_estimado if tipo_seleccionado == Pedido.TipoEntrega.ENVIO_DOMICILIO else ENVIO_DEFAULT
+    total = subtotal + envio_vista
     form = CheckoutForm(request.POST or None)
+
     if request.method == 'POST' and form.is_valid():
         try:
             with transaction.atomic():
                 locked_products = {p.id: p for p in Producto.objects.select_for_update().filter(id__in=[i['producto'].id for i in items])}
+                subtotal_backend = Decimal('0.00')
+                envio_backend = Decimal('0.00')
+                detalle_data = []
+
                 for item in items:
-                    product = locked_products[item['producto'].id]
-                    if product.stock < item['cantidad'] or not product.disponible_para_compra:
-                        raise ValueError(f'Stock no disponible para {product.nombre}.')
-                cliente = ClientePedido.objects.create(**form.cleaned_data)
+                    producto = locked_products[item['producto'].id]
+                    cantidad = item['cantidad']
+                    if producto.stock < cantidad or not producto.disponible_para_compra:
+                        raise ValueError(f'Stock no disponible para {producto.nombre}.')
+                    precio = producto.precio_actual
+                    subtotal_linea = precio * cantidad
+                    envio_linea = (producto.costo_envio or Decimal('0.00')) * cantidad
+                    subtotal_backend += subtotal_linea
+                    envio_backend += envio_linea
+                    detalle_data.append((producto, cantidad, precio, subtotal_linea, producto.costo_envio or Decimal('0.00'), envio_linea))
+
+                tipo_entrega = form.cleaned_data['tipo_entrega']
+                ubicacion = form.cleaned_data.get('ubicacion_recogida')
+                if tipo_entrega == Pedido.TipoEntrega.RECOGER_TIENDA:
+                    costo_envio = ENVIO_DEFAULT
+                    direccion_entrega = ''
+                    departamento_entrega = ''
+                    municipio_entrega = ''
+                    cliente_direccion = ubicacion.direccion if ubicacion else ''
+                    cliente_departamento = ubicacion.departamento or '' if ubicacion else ''
+                    cliente_municipio = ubicacion.municipio or '' if ubicacion else ''
+                else:
+                    costo_envio = envio_backend
+                    ubicacion = None
+                    direccion_entrega = form.cleaned_data['direccion']
+                    departamento_entrega = form.cleaned_data['departamento']
+                    municipio_entrega = form.cleaned_data['municipio']
+                    cliente_direccion = direccion_entrega
+                    cliente_departamento = departamento_entrega
+                    cliente_municipio = municipio_entrega
+
+                total_backend = subtotal_backend + costo_envio
+                cliente = ClientePedido.objects.create(
+                    nombres=form.cleaned_data['nombres'],
+                    apellidos=form.cleaned_data['apellidos'],
+                    telefono=form.cleaned_data['telefono'],
+                    email=form.cleaned_data['email'],
+                    direccion=cliente_direccion,
+                    departamento=cliente_departamento,
+                    municipio=cliente_municipio,
+                    nit=form.cleaned_data.get('nit', ''),
+                    observaciones=form.cleaned_data.get('observaciones', ''),
+                )
                 pedido = Pedido.objects.create(
                     cliente=cliente,
                     usuario=request.user if request.user.is_authenticated else None,
-                    subtotal=subtotal,
-                    costo_envio=ENVIO_DEFAULT,
-                    total=total,
+                    subtotal=subtotal_backend,
+                    costo_envio=costo_envio,
+                    total=total_backend,
+                    tipo_entrega=tipo_entrega,
+                    ubicacion_recogida=ubicacion,
+                    direccion_entrega=direccion_entrega,
+                    departamento_entrega=departamento_entrega,
+                    municipio_entrega=municipio_entrega,
                     estado=Pedido.Estado.RECIBIDO,
                     observaciones_cliente=form.cleaned_data.get('observaciones', ''),
                 )
-                for item in items:
-                    producto = locked_products[item['producto'].id]
+                for producto, cantidad, precio, subtotal_linea, envio_unitario, envio_linea in detalle_data:
                     DetallePedido.objects.create(
                         pedido=pedido,
                         producto=producto,
                         nombre_producto_snapshot=producto.nombre,
                         codigo_sku_snapshot=producto.codigo_sku,
-                        precio_unitario=producto.precio_actual,
-                        cantidad=item['cantidad'],
-                        subtotal=item['subtotal'],
+                        precio_unitario=precio,
+                        cantidad=cantidad,
+                        subtotal=subtotal_linea,
+                        costo_envio_unitario=envio_unitario,
+                        costo_envio_total=envio_linea,
                     )
-                    producto.stock -= item['cantidad']
+                    producto.stock -= cantidad
                     producto.save(update_fields=['stock', 'fecha_actualizacion'])
+                programar_correo_confirmacion_pedido(pedido, request=request)
                 clear_cart(request)
-                messages.success(request, f'Su pedido fue registrado correctamente. Su número de pedido es: {pedido.codigo_pedido}. Guárdelo, ya que lo necesitará para consultar el estado de su compra y para subir su comprobante de transferencia.')
+                messages.success(request, f'Su pedido fue registrado correctamente. Su número de pedido es: {pedido.codigo_pedido}. Guárdelo para consultar el estado de su compra y subir su comprobante. Si ingresó un correo electrónico válido, recibirá una copia de los datos de su pedido.')
                 return redirect('tienda:pago_transferencia', codigo_pedido=pedido.codigo_pedido)
         except ValueError as exc:
             messages.error(request, str(exc))
-    return render(request, 'tienda/public/checkout.html', {'form': form, 'items': items, 'subtotal': subtotal, 'envio': ENVIO_DEFAULT, 'total': total})
+
+    return render(request, 'tienda/public/checkout.html', {
+        'form': form,
+        'items': items,
+        'subtotal': subtotal,
+        'envio': envio_vista,
+        'envio_estimado': envio_estimado,
+        'total': total,
+        'total_con_envio': total_con_envio,
+        'total_recoger': total_recoger,
+        'subtotal_checkout': f'{subtotal:.2f}',
+        'envio_checkout': f'{envio_estimado:.2f}',
+        'total_con_envio_checkout': f'{total_con_envio:.2f}',
+        'total_recoger_checkout': f'{total_recoger:.2f}',
+        'ubicaciones': UbicacionTienda.objects.filter(activo=True),
+    })
 
 
 def _pedido_por_contacto(codigo_pedido, contacto):
-    return Pedido.objects.select_related('cliente').prefetch_related('detalles').filter(
+    return Pedido.objects.select_related('cliente', 'ubicacion_recogida').prefetch_related('detalles__producto').filter(
         codigo_pedido__iexact=codigo_pedido.strip()
     ).filter(
         Q(cliente__email__iexact=contacto.strip()) | Q(cliente__telefono__iexact=contacto.strip())
@@ -236,7 +338,7 @@ def _contexto_publico_pedido(pedido, form=None, contacto=''):
 
 
 def pago_transferencia(request, codigo_pedido):
-    pedido = get_object_or_404(Pedido.objects.select_related('cliente').prefetch_related('detalles'), codigo_pedido=codigo_pedido)
+    pedido = get_object_or_404(Pedido.objects.select_related('cliente', 'ubicacion_recogida').prefetch_related('detalles__producto'), codigo_pedido=codigo_pedido)
     form = ComprobanteTransferenciaForm(request.POST or None, request.FILES or None, instance=pedido)
     if request.method == 'POST':
         if not _puede_subir_comprobante(pedido):
@@ -276,7 +378,7 @@ def consultar_pedido(request):
 
 
 def estado_pedido(request, codigo_pedido):
-    pedido = get_object_or_404(Pedido.objects.select_related('cliente').prefetch_related('detalles'), codigo_pedido=codigo_pedido)
+    pedido = get_object_or_404(Pedido.objects.select_related('cliente', 'ubicacion_recogida').prefetch_related('detalles__producto'), codigo_pedido=codigo_pedido)
     return render(request, 'tienda/public/estado_pedido.html', _contexto_publico_pedido(pedido))
 
 
@@ -311,6 +413,21 @@ def admin_productos(request):
 @grupo_requerido('Administrador', 'Tienda')
 def admin_producto_form(request, pk=None):
     producto = get_object_or_404(Producto, pk=pk) if pk else None
+
+    if request.method == 'POST' and producto:
+        desactivar_imagen_id = request.POST.get('desactivar_imagen_id')
+        activar_imagen_id = request.POST.get('activar_imagen_id')
+        if desactivar_imagen_id:
+            imagen = get_object_or_404(ImagenProducto, pk=desactivar_imagen_id, producto=producto)
+            _desactivar_imagen_producto(producto, imagen)
+            messages.success(request, 'Imagen desactivada correctamente.')
+            return redirect('tienda:admin_producto_editar', pk=producto.pk)
+        if activar_imagen_id:
+            imagen = get_object_or_404(ImagenProducto, pk=activar_imagen_id, producto=producto)
+            _activar_imagen_producto(producto, imagen)
+            messages.success(request, 'Imagen activada correctamente.')
+            return redirect('tienda:admin_producto_editar', pk=producto.pk)
+
     form = ProductoForm(request.POST or None, request.FILES or None, instance=producto)
     if request.method == 'POST' and form.is_valid():
         producto = form.save()
@@ -343,9 +460,7 @@ def admin_producto_imagen_eliminar(request, producto_id, imagen_id):
     producto = get_object_or_404(Producto, pk=producto_id)
     imagen = get_object_or_404(ImagenProducto, pk=imagen_id, producto=producto)
     if request.method == 'POST':
-        imagen.activo = False
-        imagen.principal = False
-        imagen.save(update_fields=['activo', 'principal'])
+        _desactivar_imagen_producto(producto, imagen)
         messages.success(request, 'Imagen desactivada correctamente.')
     return redirect('tienda:admin_producto_editar', pk=producto.pk)
 
@@ -387,7 +502,7 @@ def admin_marca_form(request, pk=None):
 @login_required
 @grupo_requerido('Administrador', 'Tienda', 'Ventas')
 def admin_pedidos(request):
-    pedidos = Pedido.objects.select_related('cliente')
+    pedidos = Pedido.objects.select_related('cliente', 'ubicacion_recogida')
     if request.GET.get('estado'):
         pedidos = pedidos.filter(estado=request.GET['estado'])
     if request.GET.get('estado_pago'):
@@ -401,7 +516,7 @@ def admin_pedidos(request):
 @login_required
 @grupo_requerido('Administrador', 'Tienda', 'Ventas')
 def admin_pedido_detalle(request, pk):
-    pedido = get_object_or_404(Pedido.objects.select_related('cliente').prefetch_related('detalles'), pk=pk)
+    pedido = get_object_or_404(Pedido.objects.select_related('cliente', 'ubicacion_recogida').prefetch_related('detalles__producto'), pk=pk)
     estado_form = CambiarEstadoPedidoForm(request.POST or None, instance=pedido, prefix='estado')
     rechazo_form = RechazarPagoForm(request.POST or None, prefix='rechazo')
     if request.method == 'POST':
@@ -428,8 +543,26 @@ def admin_pedido_detalle(request, pk):
 @login_required
 @grupo_requerido('Administrador', 'Tienda', 'Ventas')
 def admin_pagos_pendientes(request):
-    pedidos = Pedido.objects.filter(Q(estado_pago=Pedido.EstadoPago.COMPROBANTE_RECIBIDO) | Q(estado=Pedido.Estado.PAGO_EN_REVISION)).select_related('cliente')
+    pedidos = Pedido.objects.filter(Q(estado_pago=Pedido.EstadoPago.COMPROBANTE_RECIBIDO) | Q(estado=Pedido.Estado.PAGO_EN_REVISION)).select_related('cliente', 'ubicacion_recogida')
     return render(request, 'tienda/admin/pagos/pendientes.html', {'pedidos': pedidos})
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda')
+def admin_ubicaciones_tienda(request):
+    return render(request, 'tienda/admin/ubicaciones/lista.html', {'ubicaciones': UbicacionTienda.objects.all()})
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda')
+def admin_ubicacion_tienda_form(request, pk=None):
+    ubicacion = get_object_or_404(UbicacionTienda, pk=pk) if pk else None
+    form = UbicacionTiendaForm(request.POST or None, instance=ubicacion)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Ubicación de tienda guardada correctamente.')
+        return redirect('tienda:admin_ubicaciones_tienda')
+    return render(request, 'tienda/admin/ubicaciones/form.html', {'form': form, 'ubicacion': ubicacion})
 
 
 @login_required
@@ -457,6 +590,8 @@ def admin_reportes(request):
     return render(request, 'tienda/admin/reportes.html', {
         'total_ventas': ventas.aggregate(s=Sum('total'))['s'] or 0,
         'pedidos_estado': Pedido.objects.values('estado').annotate(total=Count('id')),
+        'pedidos_tipo_entrega': Pedido.objects.values('tipo_entrega').annotate(total=Count('id')),
+        'total_envios': ventas.aggregate(s=Sum('costo_envio'))['s'] or 0,
         'mas_vendidos': DetallePedido.objects.values('nombre_producto_snapshot').annotate(cantidad=Sum('cantidad')).order_by('-cantidad')[:10],
         'bajo_stock': Producto.objects.filter(stock__lte=5).order_by('stock')[:20],
     })

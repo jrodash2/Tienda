@@ -13,7 +13,11 @@
   <header class="store-header py-3">
     <div class="container">
       <div class="d-flex flex-wrap align-items-center gap-3">
-        <a class="store-logo" href="{% url 'tienda:inicio' %}">Tienda</a>
+        <a class="store-brand store-brand-link" href="{% url 'tienda:inicio' %}" aria-label="E-Shop El Progreso">
+          <span class="store-logo-wrap">
+            <img src="{% static 'tienda/images/e-shop.png' %}" alt="E-Shop El Progreso" class="store-logo">
+          </span>
+        </a>
         <a class="store-header-btn d-none d-lg-inline-flex" href="{% url 'tienda:catalogo' %}">Categorías</a>
         <form class="store-search flex-grow-1 d-flex" action="{% url 'tienda:catalogo' %}">
           <input name="q" class="form-control" value="{{ request.GET.q }}" placeholder="Buscar productos, marcas o SKU">
