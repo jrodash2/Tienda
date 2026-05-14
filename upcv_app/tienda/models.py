@@ -99,11 +99,15 @@ class Producto(models.Model):
         return 0
 
     @property
+    def imagenes_activas(self):
+        return self.imagenes.filter(activo=True).order_by('-principal', 'orden', 'id')
+
+    @property
     def imagen_destacada(self):
-        principal = self.imagenes.filter(activo=True, principal=True).first()
+        principal = self.imagenes.filter(activo=True, principal=True).order_by('orden', 'id').first()
         if principal:
             return principal.imagen
-        primera = self.imagenes.filter(activo=True).first()
+        primera = self.imagenes.filter(activo=True).order_by('orden', 'id').first()
         if primera:
             return primera.imagen
         return self.imagen_principal

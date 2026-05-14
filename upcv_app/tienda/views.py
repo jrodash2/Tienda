@@ -31,45 +31,73 @@ def _validar_imagen_producto(archivo):
     return ''
 
 
+def _asignar_principal_si_hace_falta(producto):
+    imagenes = producto.imagenes.all()
+    principal_activa = imagenes.filter(activo=True, principal=True).order_by('orden', 'id').first()
+    if principal_activa:
+        imagenes.filter(principal=True).exclude(pk=principal_activa.pk).update(principal=False)
+        return principal_activa
+
+    imagenes.filter(principal=True).update(principal=False)
+    primera_activa = imagenes.filter(activo=True).order_by('orden', 'id').first()
+    if primera_activa:
+        primera_activa.principal = True
+        primera_activa.save(update_fields=['principal'])
+    return primera_activa
+
+
 def _procesar_imagenes_producto(request, producto):
-    for archivo in request.FILES.getlist('imagenes'):
+    imagenes_actuales = list(producto.imagenes.all())
+    principal_id = request.POST.get('imagen_principal_id')
+
+    for imagen in imagenes_actuales:
+        imagen.activo = f'imagen_activa_{imagen.pk}' in request.POST
+        orden = request.POST.get(f'imagen_orden_{imagen.pk}', '0')
+        try:
+            imagen.orden = max(0, int(orden or 0))
+        except (TypeError, ValueError):
+            imagen.orden = 0
+        imagen.alt = request.POST.get(f'imagen_alt_{imagen.pk}', '')
+        imagen.principal = bool(principal_id and str(imagen.pk) == str(principal_id))
+        if imagen.principal:
+            imagen.activo = True
+        imagen.save()
+
+    _asignar_principal_si_hace_falta(producto)
+
+    base_orden = producto.imagenes.count()
+    for index, archivo in enumerate(request.FILES.getlist('imagenes')):
         error = _validar_imagen_producto(archivo)
         if error:
             messages.warning(request, f'{archivo.name}: {error}')
             continue
-        es_principal = not producto.imagenes.filter(activo=True, principal=True).exists() and not producto.imagen_principal
+        es_principal = not producto.imagenes.filter(activo=True, principal=True).exists()
         ImagenProducto.objects.create(
             producto=producto,
             imagen=archivo,
             alt=producto.nombre,
-            orden=producto.imagenes.count(),
+            orden=base_orden + index,
+            activo=True,
             principal=es_principal,
         )
-    principal_id = request.POST.get('imagen_principal_galeria')
-    if principal_id:
-        imagen = producto.imagenes.filter(pk=principal_id).first()
-        if imagen:
-            imagen.principal = True
-            imagen.activo = True
-            imagen.save()
-    for imagen in producto.imagenes.all():
-        alt = request.POST.get(f'imagen_alt_{imagen.pk}')
-        orden = request.POST.get(f'imagen_orden_{imagen.pk}')
-        activo = request.POST.get(f'imagen_activo_{imagen.pk}') == 'on'
-        changed = False
-        if alt is not None and imagen.alt != alt:
-            imagen.alt = alt
-            changed = True
-        if orden is not None and orden.isdigit() and imagen.orden != int(orden):
-            imagen.orden = int(orden)
-            changed = True
-        if imagen.activo != activo:
-            imagen.activo = activo
-            changed = True
-        if changed:
-            imagen.save()
+
+    _asignar_principal_si_hace_falta(producto)
 
 
+def _activar_imagen_producto(producto, imagen):
+    imagen.activo = True
+    imagen.save(update_fields=['activo'])
+    if not producto.imagenes.filter(activo=True, principal=True).exists():
+        imagen.principal = True
+        imagen.save(update_fields=['principal'])
+    _asignar_principal_si_hace_falta(producto)
+
+
+def _desactivar_imagen_producto(producto, imagen):
+    imagen.activo = False
+    imagen.principal = False
+    imagen.save(update_fields=['activo', 'principal'])
+    _asignar_principal_si_hace_falta(producto)
 
 def tienda_inicio(request):
     productos = Producto.objects.filter(activo=True, mostrar_en_catalogo=True).select_related('categoria', 'marca')
@@ -311,6 +339,21 @@ def admin_productos(request):
 @grupo_requerido('Administrador', 'Tienda')
 def admin_producto_form(request, pk=None):
     producto = get_object_or_404(Producto, pk=pk) if pk else None
+
+    if request.method == 'POST' and producto:
+        desactivar_imagen_id = request.POST.get('desactivar_imagen_id')
+        activar_imagen_id = request.POST.get('activar_imagen_id')
+        if desactivar_imagen_id:
+            imagen = get_object_or_404(ImagenProducto, pk=desactivar_imagen_id, producto=producto)
+            _desactivar_imagen_producto(producto, imagen)
+            messages.success(request, 'Imagen desactivada correctamente.')
+            return redirect('tienda:admin_producto_editar', pk=producto.pk)
+        if activar_imagen_id:
+            imagen = get_object_or_404(ImagenProducto, pk=activar_imagen_id, producto=producto)
+            _activar_imagen_producto(producto, imagen)
+            messages.success(request, 'Imagen activada correctamente.')
+            return redirect('tienda:admin_producto_editar', pk=producto.pk)
+
     form = ProductoForm(request.POST or None, request.FILES or None, instance=producto)
     if request.method == 'POST' and form.is_valid():
         producto = form.save()
@@ -343,9 +386,7 @@ def admin_producto_imagen_eliminar(request, producto_id, imagen_id):
     producto = get_object_or_404(Producto, pk=producto_id)
     imagen = get_object_or_404(ImagenProducto, pk=imagen_id, producto=producto)
     if request.method == 'POST':
-        imagen.activo = False
-        imagen.principal = False
-        imagen.save(update_fields=['activo', 'principal'])
+        _desactivar_imagen_producto(producto, imagen)
         messages.success(request, 'Imagen desactivada correctamente.')
     return redirect('tienda:admin_producto_editar', pk=producto.pk)
 
