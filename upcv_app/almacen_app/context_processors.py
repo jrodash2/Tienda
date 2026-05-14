@@ -24,6 +24,8 @@ def grupo_usuario(request):
         'es_departamento': request.user.groups.filter(name='Departamento').exists(),
         'es_administrador': request.user.groups.filter(name='Administrador').exists(),
         'es_almacen': request.user.groups.filter(name='Almacen').exists(),
+        'es_tienda': request.user.groups.filter(name='Tienda').exists(),
+        'es_ventas': request.user.groups.filter(name='Ventas').exists(),
     }
 
 

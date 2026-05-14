@@ -1,0 +1,27 @@
+{% extends 'tienda/public/base_tienda.html' %}
+
+{% block title %}Consultar pedido{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center mb-4">
+  <div class="col-lg-8">
+    <div class="text-center mb-4">
+      <h1 class="fw-bold">Consultar pedido</h1>
+      <p class="text-muted">Ingrese su código de pedido y el correo o teléfono usado en la compra.</p>
+    </div>
+    <form method="post" class="card border-0 shadow-sm card-body">
+      {% csrf_token %}
+      <input type="hidden" name="accion" value="buscar">
+      <label class="form-label">Código de pedido</label>
+      <input class="form-control mb-3" name="codigo_pedido" value="{{ pedido.codigo_pedido|default:'' }}" placeholder="Ej. PED-000001-2026" required>
+      <label class="form-label">Email o teléfono</label>
+      <input class="form-control mb-3" name="contacto" value="{{ contacto_consulta }}" placeholder="correo@dominio.com o teléfono" required>
+      <button class="btn btn-primary btn-lg">Consultar</button>
+    </form>
+  </div>
+</div>
+
+{% if pedido %}
+  {% include 'tienda/public/_estado_card.html' %}
+{% endif %}
+{% endblock %}
