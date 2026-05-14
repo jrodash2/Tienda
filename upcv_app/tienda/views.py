@@ -195,6 +195,8 @@ def checkout(request):
         return redirect('tienda:catalogo')
 
     envio_estimado = calcular_envio_items(items)
+    total_con_envio = subtotal + envio_estimado
+    total_recoger = subtotal
     tipo_seleccionado = request.POST.get('tipo_entrega', Pedido.TipoEntrega.ENVIO_DOMICILIO)
     envio_vista = envio_estimado if tipo_seleccionado == Pedido.TipoEntrega.ENVIO_DOMICILIO else ENVIO_DEFAULT
     total = subtotal + envio_vista
@@ -293,6 +295,12 @@ def checkout(request):
         'envio': envio_vista,
         'envio_estimado': envio_estimado,
         'total': total,
+        'total_con_envio': total_con_envio,
+        'total_recoger': total_recoger,
+        'subtotal_checkout': f'{subtotal:.2f}',
+        'envio_checkout': f'{envio_estimado:.2f}',
+        'total_con_envio_checkout': f'{total_con_envio:.2f}',
+        'total_recoger_checkout': f'{total_recoger:.2f}',
         'ubicaciones': UbicacionTienda.objects.filter(activo=True),
     })
 

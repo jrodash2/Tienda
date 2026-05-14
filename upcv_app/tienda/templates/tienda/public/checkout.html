@@ -2,7 +2,8 @@
 {% block title %}Checkout{% endblock %}
 {% block content %}
 <h1 class="store-section-title mb-4">Finalizar compra</h1>
-<form method="post" id="checkoutForm" data-subtotal="{{ subtotal }}" data-envio="{{ envio_estimado }}">
+<form method="post" id="checkoutForm">
+  <div id="checkout-summary" class="d-none" data-subtotal="{{ subtotal_checkout }}" data-envio="{{ envio_checkout }}" data-total-envio="{{ total_con_envio_checkout }}" data-total-recoger="{{ total_recoger_checkout }}"></div>
   {% csrf_token %}
   <div class="row g-4">
     <div class="col-lg-7">
@@ -75,10 +76,10 @@
           <div class="d-flex justify-content-between gap-3 mb-2"><span>{{ item.cantidad }} x {{ item.producto.nombre }}</span><strong>Q {{ item.subtotal }}</strong></div>
         {% endfor %}
         <hr>
-        <div class="d-flex justify-content-between"><span>Subtotal productos</span><b>Q {{ subtotal }}</b></div>
-        <div class="d-flex justify-content-between shipping-cost-row"><span>Envío</span><b>Q <span id="checkoutShipping">{{ envio }}</span></b></div>
+        <div class="d-flex justify-content-between"><span>Subtotal productos</span><b><span id="checkout-subtotal">Q {{ subtotal }}</span></b></div>
+        <div class="d-flex justify-content-between shipping-cost-row"><span>Envío</span><b><span id="checkout-envio">Q {{ envio }}</span></b></div>
         <div class="small text-muted mt-1" id="shippingHelp">El envío se calcula según los productos del carrito.</div>
-        <div class="d-flex justify-content-between fs-4 mt-3"><span>Total</span><b>Q <span id="checkoutTotal">{{ total }}</span></b></div>
+        <div class="d-flex justify-content-between fs-4 mt-3"><span>Total</span><b><span id="checkout-total">Q {{ total }}</span></b></div>
         <button class="btn btn-danger btn-lg w-100 mt-3">Confirmar pedido</button>
         <a class="btn btn-outline-dark w-100 mt-2" href="{% url 'tienda:carrito' %}">Volver al carrito</a>
       </div>
@@ -88,27 +89,50 @@
 <script>
 (function(){
   const form = document.getElementById('checkoutForm');
-  if (!form) return;
-  const subtotal = Number(form.dataset.subtotal || '0');
-  const envio = Number(form.dataset.envio || '0');
+  const summary = document.getElementById('checkout-summary');
+  if (!form || !summary) return;
+
+  function parseMoney(value) {
+    if (value === null || value === undefined || value === '') return 0;
+    value = String(value).replace('Q', '').replace(/\s/g, '').replace(',', '.');
+    const number = Number.parseFloat(value);
+    return Number.isFinite(number) ? number : 0;
+  }
+
+  function formatGTQ(value) {
+    const number = Number.isFinite(value) ? value : 0;
+    return 'Q ' + number.toLocaleString('es-GT', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  }
+
+  const subtotal = parseMoney(summary.dataset.subtotal);
+  const envioBase = parseMoney(summary.dataset.envio);
   const address = document.getElementById('deliveryAddressBlock');
   const pickup = document.getElementById('pickupLocationsBlock');
-  const shipping = document.getElementById('checkoutShipping');
-  const total = document.getElementById('checkoutTotal');
+  const subtotalNode = document.getElementById('checkout-subtotal');
+  const shippingNode = document.getElementById('checkout-envio');
+  const totalNode = document.getElementById('checkout-total');
   const help = document.getElementById('shippingHelp');
-  function money(value){ return value.toFixed(2); }
-  function refresh(){
+
+  function actualizarResumenEntrega(){
     const selected = form.querySelector('input[name="tipo_entrega"]:checked')?.value || 'envio_domicilio';
     const isPickup = selected === 'recoger_tienda';
-    address.classList.toggle('d-none', isPickup);
-    pickup.classList.toggle('d-none', !isPickup);
-    shipping.textContent = money(isPickup ? 0 : envio);
-    total.textContent = money(subtotal + (isPickup ? 0 : envio));
-    help.textContent = isPickup ? 'Recoger en tienda no tiene costo de envío.' : 'El envío se calcula según los productos del carrito.';
+    const envio = isPickup ? 0 : envioBase;
+    const total = subtotal + envio;
+
+    if (address) address.classList.toggle('d-none', isPickup);
+    if (pickup) pickup.classList.toggle('d-none', !isPickup);
+    if (subtotalNode) subtotalNode.textContent = formatGTQ(subtotal);
+    if (shippingNode) shippingNode.textContent = formatGTQ(envio);
+    if (totalNode) totalNode.textContent = formatGTQ(total);
+    if (help) help.textContent = isPickup ? 'No se cobrará envío porque seleccionó recoger en tienda.' : 'El envío se calcula según los productos del carrito.';
     form.querySelectorAll('[data-delivery-card]').forEach(card => card.classList.toggle('active', card.querySelector('input').checked));
   }
-  form.querySelectorAll('input[name="tipo_entrega"]').forEach(input => input.addEventListener('change', refresh));
-  refresh();
+
+  form.querySelectorAll('input[name="tipo_entrega"]').forEach(input => input.addEventListener('change', actualizarResumenEntrega));
+  actualizarResumenEntrega();
 })();
 </script>
 {% endblock %}
