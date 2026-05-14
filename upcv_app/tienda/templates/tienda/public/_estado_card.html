@@ -32,6 +32,26 @@
       </div>
     </div>
   </div>
+  <div class="delivery-detail-card mt-4">
+    <h5 class="fw-bold mb-3">Forma de entrega</h5>
+    <p class="mb-2"><strong>Tipo:</strong> {{ pedido.get_tipo_entrega_display|default:'Envío a domicilio' }}</p>
+    {% if pedido.tipo_entrega == 'recoger_tienda' %}
+      {% if pedido.ubicacion_recogida %}
+        <p class="mb-1"><strong>Ubicación:</strong> {{ pedido.ubicacion_recogida.nombre }}</p>
+        <p class="mb-1"><strong>Dirección:</strong> {{ pedido.ubicacion_recogida.direccion }}</p>
+        {% if pedido.ubicacion_recogida.telefono %}<p class="mb-1"><strong>Teléfono:</strong> {{ pedido.ubicacion_recogida.telefono }}</p>{% endif %}
+        {% if pedido.ubicacion_recogida.horario %}<p class="mb-1"><strong>Horario:</strong> {{ pedido.ubicacion_recogida.horario }}</p>{% endif %}
+        {% if pedido.ubicacion_recogida.google_maps_url %}<a href="{{ pedido.ubicacion_recogida.google_maps_url }}" target="_blank" rel="noopener">Ver ubicación en Google Maps</a>{% endif %}
+      {% else %}
+        <p class="text-muted mb-0">Ubicación de recogida no disponible.</p>
+      {% endif %}
+    {% else %}
+      <p class="mb-1"><strong>Dirección:</strong> {{ pedido.direccion_entrega|default:pedido.cliente.direccion }}</p>
+      <p class="mb-1"><strong>Departamento:</strong> {{ pedido.departamento_entrega|default:pedido.cliente.departamento }}</p>
+      <p class="mb-1"><strong>Municipio:</strong> {{ pedido.municipio_entrega|default:pedido.cliente.municipio }}</p>
+      <p class="mb-0"><strong>Costo de envío:</strong> Q {{ pedido.costo_envio }}</p>
+    {% endif %}
+  </div>
 
   {% if pago == 'confirmado' %}
     <div class="alert alert-success mt-4 mb-0">Su pago fue confirmado. Estamos avanzando con la preparación o entrega de su pedido.</div>

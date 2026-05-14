@@ -8,12 +8,12 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from almacen_app.utils import grupo_requerido
-from .cart import add_to_cart as session_add, cart_items, clear_cart, remove_from_cart as session_remove, update_cart as session_update
+from .cart import add_to_cart as session_add, calcular_envio_items, cart_items, clear_cart, remove_from_cart as session_remove, update_cart as session_update
 from .forms import (
     CambiarEstadoPedidoForm, CategoriaProductoForm, CheckoutForm, ComprobanteTransferenciaForm,
-    CuentaBancariaForm, MarcaProductoForm, ProductoForm, RechazarPagoForm,
+    CuentaBancariaForm, MarcaProductoForm, ProductoForm, RechazarPagoForm, UbicacionTiendaForm,
 )
-from .models import CategoriaProducto, ClientePedido, CuentaBancaria, DetallePedido, ImagenProducto, MarcaProducto, Pedido, Producto
+from .models import CategoriaProducto, ClientePedido, CuentaBancaria, DetallePedido, ImagenProducto, MarcaProducto, Pedido, Producto, UbicacionTienda
 
 ENVIO_DEFAULT = Decimal('0.00')
 
@@ -170,7 +170,8 @@ def agregar_carrito(request, producto_id):
 
 def carrito(request):
     items, subtotal = cart_items(request)
-    return render(request, 'tienda/public/carrito.html', {'items': items, 'subtotal': subtotal, 'total': subtotal + ENVIO_DEFAULT})
+    envio_estimado = calcular_envio_items(items)
+    return render(request, 'tienda/public/carrito.html', {'items': items, 'subtotal': subtotal, 'envio_estimado': envio_estimado, 'total': subtotal + ENVIO_DEFAULT})
 
 
 @require_POST
@@ -192,49 +193,112 @@ def checkout(request):
     if not items:
         messages.warning(request, 'Tu carrito está vacío.')
         return redirect('tienda:catalogo')
-    total = subtotal + ENVIO_DEFAULT
+
+    envio_estimado = calcular_envio_items(items)
+    tipo_seleccionado = request.POST.get('tipo_entrega', Pedido.TipoEntrega.ENVIO_DOMICILIO)
+    envio_vista = envio_estimado if tipo_seleccionado == Pedido.TipoEntrega.ENVIO_DOMICILIO else ENVIO_DEFAULT
+    total = subtotal + envio_vista
     form = CheckoutForm(request.POST or None)
+
     if request.method == 'POST' and form.is_valid():
         try:
             with transaction.atomic():
                 locked_products = {p.id: p for p in Producto.objects.select_for_update().filter(id__in=[i['producto'].id for i in items])}
+                subtotal_backend = Decimal('0.00')
+                envio_backend = Decimal('0.00')
+                detalle_data = []
+
                 for item in items:
-                    product = locked_products[item['producto'].id]
-                    if product.stock < item['cantidad'] or not product.disponible_para_compra:
-                        raise ValueError(f'Stock no disponible para {product.nombre}.')
-                cliente = ClientePedido.objects.create(**form.cleaned_data)
+                    producto = locked_products[item['producto'].id]
+                    cantidad = item['cantidad']
+                    if producto.stock < cantidad or not producto.disponible_para_compra:
+                        raise ValueError(f'Stock no disponible para {producto.nombre}.')
+                    precio = producto.precio_actual
+                    subtotal_linea = precio * cantidad
+                    envio_linea = (producto.costo_envio or Decimal('0.00')) * cantidad
+                    subtotal_backend += subtotal_linea
+                    envio_backend += envio_linea
+                    detalle_data.append((producto, cantidad, precio, subtotal_linea, producto.costo_envio or Decimal('0.00'), envio_linea))
+
+                tipo_entrega = form.cleaned_data['tipo_entrega']
+                ubicacion = form.cleaned_data.get('ubicacion_recogida')
+                if tipo_entrega == Pedido.TipoEntrega.RECOGER_TIENDA:
+                    costo_envio = ENVIO_DEFAULT
+                    direccion_entrega = ''
+                    departamento_entrega = ''
+                    municipio_entrega = ''
+                    cliente_direccion = ubicacion.direccion if ubicacion else ''
+                    cliente_departamento = ubicacion.departamento or '' if ubicacion else ''
+                    cliente_municipio = ubicacion.municipio or '' if ubicacion else ''
+                else:
+                    costo_envio = envio_backend
+                    ubicacion = None
+                    direccion_entrega = form.cleaned_data['direccion']
+                    departamento_entrega = form.cleaned_data['departamento']
+                    municipio_entrega = form.cleaned_data['municipio']
+                    cliente_direccion = direccion_entrega
+                    cliente_departamento = departamento_entrega
+                    cliente_municipio = municipio_entrega
+
+                total_backend = subtotal_backend + costo_envio
+                cliente = ClientePedido.objects.create(
+                    nombres=form.cleaned_data['nombres'],
+                    apellidos=form.cleaned_data['apellidos'],
+                    telefono=form.cleaned_data['telefono'],
+                    email=form.cleaned_data['email'],
+                    direccion=cliente_direccion,
+                    departamento=cliente_departamento,
+                    municipio=cliente_municipio,
+                    nit=form.cleaned_data.get('nit', ''),
+                    observaciones=form.cleaned_data.get('observaciones', ''),
+                )
                 pedido = Pedido.objects.create(
                     cliente=cliente,
                     usuario=request.user if request.user.is_authenticated else None,
-                    subtotal=subtotal,
-                    costo_envio=ENVIO_DEFAULT,
-                    total=total,
+                    subtotal=subtotal_backend,
+                    costo_envio=costo_envio,
+                    total=total_backend,
+                    tipo_entrega=tipo_entrega,
+                    ubicacion_recogida=ubicacion,
+                    direccion_entrega=direccion_entrega,
+                    departamento_entrega=departamento_entrega,
+                    municipio_entrega=municipio_entrega,
                     estado=Pedido.Estado.RECIBIDO,
                     observaciones_cliente=form.cleaned_data.get('observaciones', ''),
                 )
-                for item in items:
-                    producto = locked_products[item['producto'].id]
+                for producto, cantidad, precio, subtotal_linea, envio_unitario, envio_linea in detalle_data:
                     DetallePedido.objects.create(
                         pedido=pedido,
                         producto=producto,
                         nombre_producto_snapshot=producto.nombre,
                         codigo_sku_snapshot=producto.codigo_sku,
-                        precio_unitario=producto.precio_actual,
-                        cantidad=item['cantidad'],
-                        subtotal=item['subtotal'],
+                        precio_unitario=precio,
+                        cantidad=cantidad,
+                        subtotal=subtotal_linea,
+                        costo_envio_unitario=envio_unitario,
+                        costo_envio_total=envio_linea,
                     )
-                    producto.stock -= item['cantidad']
+                    producto.stock -= cantidad
                     producto.save(update_fields=['stock', 'fecha_actualizacion'])
                 clear_cart(request)
-                messages.success(request, f'Su pedido fue registrado correctamente. Su número de pedido es: {pedido.codigo_pedido}. Guárdelo, ya que lo necesitará para consultar el estado de su compra y para subir su comprobante de transferencia.')
+                messages.success(request, f'Su pedido fue registrado correctamente. Su número de pedido es: {pedido.codigo_pedido}. Guárdelo para consultar el estado de su compra y subir su comprobante.')
                 return redirect('tienda:pago_transferencia', codigo_pedido=pedido.codigo_pedido)
         except ValueError as exc:
             messages.error(request, str(exc))
-    return render(request, 'tienda/public/checkout.html', {'form': form, 'items': items, 'subtotal': subtotal, 'envio': ENVIO_DEFAULT, 'total': total})
+
+    return render(request, 'tienda/public/checkout.html', {
+        'form': form,
+        'items': items,
+        'subtotal': subtotal,
+        'envio': envio_vista,
+        'envio_estimado': envio_estimado,
+        'total': total,
+        'ubicaciones': UbicacionTienda.objects.filter(activo=True),
+    })
 
 
 def _pedido_por_contacto(codigo_pedido, contacto):
-    return Pedido.objects.select_related('cliente').prefetch_related('detalles').filter(
+    return Pedido.objects.select_related('cliente', 'ubicacion_recogida').prefetch_related('detalles__producto').filter(
         codigo_pedido__iexact=codigo_pedido.strip()
     ).filter(
         Q(cliente__email__iexact=contacto.strip()) | Q(cliente__telefono__iexact=contacto.strip())
@@ -264,7 +328,7 @@ def _contexto_publico_pedido(pedido, form=None, contacto=''):
 
 
 def pago_transferencia(request, codigo_pedido):
-    pedido = get_object_or_404(Pedido.objects.select_related('cliente').prefetch_related('detalles'), codigo_pedido=codigo_pedido)
+    pedido = get_object_or_404(Pedido.objects.select_related('cliente', 'ubicacion_recogida').prefetch_related('detalles__producto'), codigo_pedido=codigo_pedido)
     form = ComprobanteTransferenciaForm(request.POST or None, request.FILES or None, instance=pedido)
     if request.method == 'POST':
         if not _puede_subir_comprobante(pedido):
@@ -304,7 +368,7 @@ def consultar_pedido(request):
 
 
 def estado_pedido(request, codigo_pedido):
-    pedido = get_object_or_404(Pedido.objects.select_related('cliente').prefetch_related('detalles'), codigo_pedido=codigo_pedido)
+    pedido = get_object_or_404(Pedido.objects.select_related('cliente', 'ubicacion_recogida').prefetch_related('detalles__producto'), codigo_pedido=codigo_pedido)
     return render(request, 'tienda/public/estado_pedido.html', _contexto_publico_pedido(pedido))
 
 
@@ -428,7 +492,7 @@ def admin_marca_form(request, pk=None):
 @login_required
 @grupo_requerido('Administrador', 'Tienda', 'Ventas')
 def admin_pedidos(request):
-    pedidos = Pedido.objects.select_related('cliente')
+    pedidos = Pedido.objects.select_related('cliente', 'ubicacion_recogida')
     if request.GET.get('estado'):
         pedidos = pedidos.filter(estado=request.GET['estado'])
     if request.GET.get('estado_pago'):
@@ -442,7 +506,7 @@ def admin_pedidos(request):
 @login_required
 @grupo_requerido('Administrador', 'Tienda', 'Ventas')
 def admin_pedido_detalle(request, pk):
-    pedido = get_object_or_404(Pedido.objects.select_related('cliente').prefetch_related('detalles'), pk=pk)
+    pedido = get_object_or_404(Pedido.objects.select_related('cliente', 'ubicacion_recogida').prefetch_related('detalles__producto'), pk=pk)
     estado_form = CambiarEstadoPedidoForm(request.POST or None, instance=pedido, prefix='estado')
     rechazo_form = RechazarPagoForm(request.POST or None, prefix='rechazo')
     if request.method == 'POST':
@@ -469,8 +533,26 @@ def admin_pedido_detalle(request, pk):
 @login_required
 @grupo_requerido('Administrador', 'Tienda', 'Ventas')
 def admin_pagos_pendientes(request):
-    pedidos = Pedido.objects.filter(Q(estado_pago=Pedido.EstadoPago.COMPROBANTE_RECIBIDO) | Q(estado=Pedido.Estado.PAGO_EN_REVISION)).select_related('cliente')
+    pedidos = Pedido.objects.filter(Q(estado_pago=Pedido.EstadoPago.COMPROBANTE_RECIBIDO) | Q(estado=Pedido.Estado.PAGO_EN_REVISION)).select_related('cliente', 'ubicacion_recogida')
     return render(request, 'tienda/admin/pagos/pendientes.html', {'pedidos': pedidos})
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda')
+def admin_ubicaciones_tienda(request):
+    return render(request, 'tienda/admin/ubicaciones/lista.html', {'ubicaciones': UbicacionTienda.objects.all()})
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda')
+def admin_ubicacion_tienda_form(request, pk=None):
+    ubicacion = get_object_or_404(UbicacionTienda, pk=pk) if pk else None
+    form = UbicacionTiendaForm(request.POST or None, instance=ubicacion)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Ubicación de tienda guardada correctamente.')
+        return redirect('tienda:admin_ubicaciones_tienda')
+    return render(request, 'tienda/admin/ubicaciones/form.html', {'form': form, 'ubicacion': ubicacion})
 
 
 @login_required
@@ -498,6 +580,8 @@ def admin_reportes(request):
     return render(request, 'tienda/admin/reportes.html', {
         'total_ventas': ventas.aggregate(s=Sum('total'))['s'] or 0,
         'pedidos_estado': Pedido.objects.values('estado').annotate(total=Count('id')),
+        'pedidos_tipo_entrega': Pedido.objects.values('tipo_entrega').annotate(total=Count('id')),
+        'total_envios': ventas.aggregate(s=Sum('costo_envio'))['s'] or 0,
         'mas_vendidos': DetallePedido.objects.values('nombre_producto_snapshot').annotate(cantidad=Sum('cantidad')).order_by('-cantidad')[:10],
         'bajo_stock': Producto.objects.filter(stock__lte=5).order_by('stock')[:20],
     })

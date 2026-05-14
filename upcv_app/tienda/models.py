@@ -59,6 +59,7 @@ class Producto(models.Model):
     precio = models.DecimalField(max_digits=12, decimal_places=2)
     precio_oferta = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
     stock = models.PositiveIntegerField(default=0)
+    costo_envio = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'), help_text='Indique el costo de envío de este producto. Si es 0, se considerará envío gratuito para este producto.')
     imagen_principal = models.ImageField(upload_to='tienda/productos/', blank=True, null=True)
     activo = models.BooleanField(default=True)
     destacado = models.BooleanField(default=False)
@@ -164,6 +165,27 @@ class ClientePedido(models.Model):
         return f'{self.nombres} {self.apellidos}'.strip()
 
 
+class UbicacionTienda(models.Model):
+    nombre = models.CharField(max_length=150)
+    direccion = models.TextField()
+    departamento = models.CharField(max_length=100, blank=True, null=True)
+    municipio = models.CharField(max_length=100, blank=True, null=True)
+    telefono = models.CharField(max_length=30, blank=True, null=True)
+    horario = models.CharField(max_length=200, blank=True, null=True)
+    google_maps_url = models.URLField(blank=True, null=True)
+    activo = models.BooleanField(default=True)
+    orden = models.PositiveIntegerField(default=0)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['orden', 'nombre']
+        verbose_name = 'ubicación de tienda'
+        verbose_name_plural = 'ubicaciones de tienda'
+
+    def __str__(self):
+        return self.nombre
+
+
 class Pedido(models.Model):
     class Estado(models.TextChoices):
         PENDIENTE = 'pendiente', 'Pendiente'
@@ -185,12 +207,21 @@ class Pedido(models.Model):
     class MetodoPago(models.TextChoices):
         TRANSFERENCIA = 'transferencia_bancaria', 'Transferencia bancaria'
 
+    class TipoEntrega(models.TextChoices):
+        RECOGER_TIENDA = 'recoger_tienda', 'Recoger en tienda'
+        ENVIO_DOMICILIO = 'envio_domicilio', 'Envío a domicilio'
+
     codigo_pedido = models.CharField(max_length=30, unique=True, blank=True)
     cliente = models.ForeignKey(ClientePedido, on_delete=models.PROTECT, related_name='pedidos')
     usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, related_name='pedidos_tienda', blank=True, null=True)
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     costo_envio = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    tipo_entrega = models.CharField(max_length=30, choices=TipoEntrega.choices, default=TipoEntrega.ENVIO_DOMICILIO)
+    ubicacion_recogida = models.ForeignKey(UbicacionTienda, on_delete=models.SET_NULL, blank=True, null=True, related_name='pedidos')
+    direccion_entrega = models.TextField(blank=True, null=True)
+    departamento_entrega = models.CharField(max_length=100, blank=True, null=True)
+    municipio_entrega = models.CharField(max_length=100, blank=True, null=True)
     estado = models.CharField(max_length=30, choices=Estado.choices, default=Estado.PENDIENTE)
     metodo_pago = models.CharField(max_length=40, choices=MetodoPago.choices, default=MetodoPago.TRANSFERENCIA)
     estado_pago = models.CharField(max_length=30, choices=EstadoPago.choices, default=EstadoPago.PENDIENTE)
@@ -226,6 +257,8 @@ class DetallePedido(models.Model):
     precio_unitario = models.DecimalField(max_digits=12, decimal_places=2)
     cantidad = models.PositiveIntegerField(default=1)
     subtotal = models.DecimalField(max_digits=12, decimal_places=2)
+    costo_envio_unitario = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    costo_envio_total = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
 
     class Meta:
         ordering = ['id']
