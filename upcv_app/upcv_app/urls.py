@@ -7,6 +7,7 @@ from django.contrib.auth import views as auth_views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('almacen/', include('almacen_app.urls')),  # Incluye las URLs de tu aplicación
+    path('tienda/', include('tienda.urls')),
     path('', include('almacen_app.urls')),  # Esto redirige la raíz al signin o vista principal
     path('password_reset/', auth_views.PasswordResetView.as_view(template_name='registration/password_reset_form.html'), name='password_reset'),
     path('password_reset/done/', auth_views.PasswordResetDoneView.as_view(template_name='registration/password_reset_done.html'), name='password_reset_done'),

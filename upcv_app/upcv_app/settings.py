@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     
     'almacen_app.apps.AlmacenAppConfig',  # ✅ solo esta línea
+    'tienda.apps.TiendaConfig',
 ]
 
 
