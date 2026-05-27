@@ -1,12 +1,29 @@
 document.addEventListener('DOMContentLoaded', function () {
+  const menuBtn = document.querySelector('[data-store-menu-toggle]');
+  const chips = document.querySelector('#storeNavChips');
+  if (menuBtn && chips) {
+    menuBtn.addEventListener('click', function () {
+      const expanded = menuBtn.getAttribute('aria-expanded') === 'true';
+      menuBtn.setAttribute('aria-expanded', String(!expanded));
+      chips.classList.toggle('d-none', expanded);
+    });
+    if (window.innerWidth < 768) chips.classList.add('d-none');
+  }
+
+  const currentPath = window.location.pathname;
+  document.querySelectorAll('.store-nav-chips a').forEach(function (link) {
+    if (link.getAttribute('href') && currentPath === '/tienda/' && link.textContent.includes('Catálogo')) return;
+    if (link.href === window.location.href) link.classList.add('active');
+  });
+
   document.querySelectorAll('[data-store-thumb]').forEach(function (thumb) {
     thumb.addEventListener('click', function () {
       const target = document.querySelector(thumb.dataset.storeTarget || '#storeGalleryMain');
       if (!target) return;
       target.src = thumb.dataset.storeSrc;
       target.alt = thumb.alt || '';
-      document.querySelectorAll('[data-store-thumb]').forEach(function (item) { item.classList.remove('active'); });
-      thumb.classList.add('active');
+      document.querySelectorAll('[data-store-thumb]').forEach(function (item) { item.classList.remove('active','is-active'); });
+      thumb.classList.add('active','is-active');
     });
   });
 
