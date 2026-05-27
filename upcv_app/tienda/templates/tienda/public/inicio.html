@@ -1,29 +1,54 @@
 {% extends 'tienda/public/base_tienda.html' %}
 {% block title %}Tienda en línea{% endblock %}
 {% block content %}
-<section class="store-hero p-4 p-lg-5 mb-5">
-  <div class="row align-items-center g-4 position-relative">
-    <div class="col-lg-7">
-      <span class="badge bg-danger mb-3">Compra fácil y rápida</span>
-      <h1 class="display-6 fw-black store-section-title">Tu tienda online con experiencia moderna en móvil, tablet y escritorio</h1>
-      <p class="lead text-muted">Encuentra ofertas, productos nuevos y categorías destacadas. Compra rápido y rastrea tu pedido cuando quieras.</p>
-      <div class="d-flex flex-wrap gap-2"><a class="btn btn-danger btn-lg" href="{% url 'tienda:catalogo' %}">Ver catálogo</a><a class="btn btn-outline-dark btn-lg" href="{% url 'tienda:consultar_pedido' %}">Consultar pedido</a></div>
-    </div>
-    <div class="col-lg-5">
-      <div class="store-hero-side">
-        <h3 class="fw-bold">Todo en un solo lugar</h3>
-        <p class="text-muted mb-0">Catálogo visual, carrito ágil, checkout claro y pago por transferencia con confirmación de compra.</p>
+<section class="store-hero mb-5">
+  <div class="store-hero-card">
+    <div class="row align-items-center g-4">
+      <div class="col-lg-7">
+        <span class="store-badge">Compra rápida y segura</span>
+        <h1>Tu tienda online para comprar fácil desde cualquier dispositivo</h1>
+        <p>Descubre ofertas, productos nuevos y categorías destacadas. Agrega al carrito en segundos y consulta tu pedido cuando quieras.</p>
+        <div class="store-hero-actions">
+          <a class="store-btn-primary" href="{% url 'tienda:catalogo' %}">Ver catálogo</a>
+          <a class="store-btn-outline" href="{% url 'tienda:consultar_pedido' %}">Consultar pedido</a>
+        </div>
+      </div>
+      <div class="col-lg-5">
+        <div class="store-hero-side">
+          <h3>Experiencia moderna E-Shop</h3>
+          <ul>
+            <li>Catálogo visual y buscador destacado.</li>
+            <li>Carrito y checkout claros para móvil y escritorio.</li>
+            <li>Seguimiento de pedido y compra por WhatsApp.</li>
+          </ul>
+        </div>
       </div>
     </div>
   </div>
 </section>
 
-<section class="mb-5">
-  <div class="d-flex justify-content-between align-items-end mb-3"><div><h2 class="store-section-title">Categorías destacadas</h2><p class="store-section-subtitle mb-0">Navega por nuestras líneas principales</p></div><a href="{% url 'tienda:catalogo' %}" class="btn btn-outline-danger">Ver más</a></div>
-  <div class="store-category-row">{% for c in categorias %}<a class="store-category-pill" href="{% url 'tienda:catalogo' %}?categoria={{ c.slug }}">{% if c.imagen %}<img class="store-category-image" src="{{ c.imagen.url }}" alt="{{ c.nombre }}">{% else %}<div class="store-category-image">{{ c.nombre|slice:':1' }}</div>{% endif %}<span class="fw-bold">{{ c.nombre }}</span></a>{% empty %}<div class="alert alert-info">No hay categorías activas.</div>{% endfor %}</div>
+<section class="store-section">
+  <div class="store-section-header">
+    <div><h2>Categorías para ti</h2><p>Explora nuestras categorías activas</p></div>
+    <a href="{% url 'tienda:catalogo' %}" class="store-btn-outline">Ver catálogo</a>
+  </div>
+  <div class="store-category-strip">
+    {% for c in categorias %}
+      <a class="store-category-card" href="{% url 'tienda:catalogo' %}?categoria={{ c.slug }}">
+        {% if c.imagen %}
+          <img class="store-category-image" src="{{ c.imagen.url }}" alt="{{ c.nombre }}">
+        {% else %}
+          <div class="store-category-image store-category-placeholder">{{ c.nombre|slice:':1' }}</div>
+        {% endif %}
+        <span>{{ c.nombre }}</span>
+      </a>
+    {% empty %}
+      <div class="alert alert-info w-100">No hay categorías activas.</div>
+    {% endfor %}
+  </div>
 </section>
 
-<section class="mb-5"><div class="section-head"><h2 class="store-section-title">Ofertas destacadas</h2><a href="{% url 'tienda:catalogo' %}?ofertas=1">Ver todo</a></div><div class="row row-cols-2 row-cols-md-2 row-cols-xl-4 g-3 g-lg-4">{% for producto in ofertas %}{% include 'tienda/public/_producto_card.html' %}{% empty %}<p class="text-muted">Aún no hay ofertas activas.</p>{% endfor %}</div></section>
-<section class="mb-5"><div class="section-head"><h2 class="store-section-title">Productos destacados</h2><a href="{% url 'tienda:catalogo' %}?orden=destacados">Ver todo</a></div><div class="row row-cols-2 row-cols-md-2 row-cols-xl-4 g-3 g-lg-4">{% for producto in destacados %}{% include 'tienda/public/_producto_card.html' %}{% empty %}<p class="text-muted">No hay productos destacados.</p>{% endfor %}</div></section>
-<section class="mb-5"><div class="section-head"><h2 class="store-section-title">Nuevos productos</h2><a href="{% url 'tienda:catalogo' %}?orden=recientes">Ver todo</a></div><div class="row row-cols-2 row-cols-md-2 row-cols-xl-4 g-3 g-lg-4">{% for producto in nuevos %}{% include 'tienda/public/_producto_card.html' %}{% empty %}<p class="text-muted">Pronto agregaremos nuevos productos.</p>{% endfor %}</div></section>
+<section class="store-section"><div class="store-section-header"><h2>Ofertas destacadas</h2><a href="{% url 'tienda:catalogo' %}?ofertas=1">Ver todos</a></div><div class="store-product-grid">{% for producto in ofertas %}{% include 'tienda/public/_producto_card.html' %}{% empty %}<p class="text-muted">Aún no hay ofertas activas.</p>{% endfor %}</div></section>
+<section class="store-section"><div class="store-section-header"><h2>Productos destacados</h2><a href="{% url 'tienda:catalogo' %}?orden=destacados">Ver todos</a></div><div class="store-product-grid">{% for producto in destacados %}{% include 'tienda/public/_producto_card.html' %}{% empty %}<p class="text-muted">No hay productos destacados.</p>{% endfor %}</div></section>
+<section class="store-section"><div class="store-section-header"><h2>Productos nuevos</h2><a href="{% url 'tienda:catalogo' %}?orden=recientes">Ver todos</a></div><div class="store-product-grid">{% for producto in nuevos %}{% include 'tienda/public/_producto_card.html' %}{% empty %}<p class="text-muted">Pronto agregaremos nuevos productos.</p>{% endfor %}</div></section>
 {% endblock %}

@@ -1,4 +1,15 @@
 document.addEventListener('DOMContentLoaded', function () {
+  const menuButton = document.querySelector('[data-store-toggle-menu]');
+  const mobileMenu = document.querySelector('#storeMobileMenu');
+
+  if (menuButton && mobileMenu) {
+    menuButton.addEventListener('click', function () {
+      const expanded = menuButton.getAttribute('aria-expanded') === 'true';
+      menuButton.setAttribute('aria-expanded', String(!expanded));
+      mobileMenu.classList.toggle('is-open');
+    });
+  }
+
   document.querySelectorAll('[data-store-thumb]').forEach(function (thumb) {
     thumb.addEventListener('click', function () {
       const target = document.querySelector(thumb.dataset.storeTarget || '#storeGalleryMain');
