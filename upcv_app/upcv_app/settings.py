@@ -163,7 +163,7 @@ MEDIA_URL = '/media/'  # La URL pública donde los archivos de medios serán acc
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')  # El directorio donde se almacenan los archivos subidos
 
 
-LOGIN_URL = '/no-autorizado/'  # o una ruta válida a la que redirigir
+LOGIN_URL = '/login/'
 
 LOGOUT_ON_PASSWORD_CHANGE = True  # si usas algún middleware de seguridad extendido
 
