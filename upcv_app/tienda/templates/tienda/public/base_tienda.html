@@ -10,33 +10,44 @@
   <link rel="stylesheet" href="{% static 'tienda/css/tienda.css' %}">
 </head>
 <body class="store-body">
-  <header class="store-header py-3">
-    <div class="container">
-      <div class="d-flex flex-wrap align-items-center gap-3">
+  <header class="store-header">
+    <div class="container py-3">
+      <div class="store-header-top">
         <a class="store-brand store-brand-link" href="{% url 'tienda:inicio' %}" aria-label="E-Shop El Progreso">
-          <span >
-            <img src="{% static 'tienda/images/e-shop.png' %}" alt="E-Shop El Progreso" class="store-logo">
-          </span>
+          <img src="{% static 'tienda/images/e-shop.png' %}" alt="E-Shop El Progreso" class="store-logo">
         </a>
-        <a class="store-header-btn d-none d-lg-inline-flex" href="{% url 'tienda:catalogo' %}">Categorías</a>
-        <form class="store-search flex-grow-1 d-flex" action="{% url 'tienda:catalogo' %}">
-          <input name="q" class="form-control" value="{{ request.GET.q }}" placeholder="Buscar productos, marcas o SKU">
-          <button class="btn btn-dark px-4">Buscar</button>
-        </form>
-        <div class="store-header-actions d-flex align-items-center gap-2">
-          <a class="store-header-btn" href="{% url 'tienda:consultar_pedido' %}">Rastrear pedido</a>
-          <a class="store-header-btn" href="{% url 'tienda:carrito' %}">Carrito <span class="store-cart-badge">{{ carrito_total_items|default:0 }}</span></a>
+        <button class="store-menu-toggle d-lg-none" type="button" data-bs-toggle="collapse" data-bs-target="#storeMobileMenu" aria-controls="storeMobileMenu" aria-expanded="false" aria-label="Abrir menú">
+          <i class="fa fa-bars" aria-hidden="true"></i>
+        </button>
+        <div class="store-header-actions">
+          <a class="store-header-btn" href="{% url 'tienda:consultar_pedido' %}"><i class="fa fa-truck"></i><span>Rastrear</span></a>
+          <a class="store-header-btn" href="{% url 'tienda:carrito' %}"><i class="fa fa-shopping-cart"></i><span>Carrito</span><span class="store-cart-badge">{{ carrito_total_items|default:0 }}</span></a>
           {% if request.user.is_authenticated %}
-            <a class="store-header-btn" href="{% url 'almacen:dahsboard' %}">Panel</a>
+            <a class="store-header-btn" href="{% url 'almacen:dahsboard' %}"><i class="fa fa-user"></i><span>Panel</span></a>
           {% else %}
-            <a class="store-header-btn" href="{% url 'login' %}">Iniciar sesión</a>
+            <a class="store-header-btn" href="{% url 'login' %}"><i class="fa fa-sign-in"></i><span>Iniciar sesión</span></a>
           {% endif %}
+        </div>
+      </div>
+      <form class="store-search" action="{% url 'tienda:catalogo' %}">
+        <i class="fa fa-search" aria-hidden="true"></i>
+        <input name="q" class="form-control" value="{{ request.GET.q }}" placeholder="Buscar productos, marcas o SKU">
+        <button class="btn btn-dark px-4">Buscar</button>
+      </form>
+      <div class="collapse mt-3" id="storeMobileMenu">
+        <div class="store-mobile-panel">
+          <a href="{% url 'tienda:catalogo' %}">Catálogo</a>
+          <a href="{% url 'tienda:catalogo' %}?ofertas=1">Ofertas</a>
+          <a href="{% url 'tienda:catalogo' %}?orden=recientes">Productos nuevos</a>
+          <a href="{% url 'tienda:catalogo' %}?orden=destacados">Más vendidos</a>
+          <a href="{% url 'tienda:consultar_pedido' %}">Consultar pedido</a>
         </div>
       </div>
     </div>
   </header>
+
   <nav class="store-nav-secondary py-2">
-    <div class="container d-flex flex-wrap gap-4">
+    <div class="container store-quick-links">
       <a href="{% url 'tienda:catalogo' %}?ofertas=1">Ofertas</a>
       <a href="{% url 'tienda:catalogo' %}">Marcas</a>
       <a href="{% url 'tienda:catalogo' %}">Catálogo</a>
@@ -45,20 +56,20 @@
       <a href="{% url 'tienda:consultar_pedido' %}">Consultar pedido</a>
     </div>
   </nav>
+
   <main class="container py-4">
-    {% if messages %}
-      {% for message in messages %}
-        <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show shadow-sm">{{ message }}<button class="btn-close" data-bs-dismiss="alert"></button></div>
-      {% endfor %}
-    {% endif %}
+    {% if messages %}{% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show shadow-sm">{{ message }}<button class="btn-close" data-bs-dismiss="alert"></button></div>
+    {% endfor %}{% endif %}
     {% block content %}{% endblock %}
   </main>
+
   <footer class="store-footer mt-5 py-5">
     <div class="container">
       <div class="row g-4">
-        <div class="col-md-4"><h5>Tienda en línea</h5><p class="mb-0">Catálogo moderno con pago por transferencia bancaria.</p></div>
-        <div class="col-md-4"><h5>Ayuda</h5><a href="{% url 'tienda:consultar_pedido' %}">Rastrear pedido</a><br><a href="{% url 'tienda:catalogo' %}">Ver catálogo</a></div>
-        <div class="col-md-4"><h5>Compra segura</h5><p class="mb-0">Guarde su número de pedido para consultar su compra y subir comprobantes.</p></div>
+        <div class="col-md-4"><h5>E-Shop El Progreso</h5><p class="mb-0">Compra en línea con seguimiento de pedido y pago por transferencia bancaria.</p></div>
+        <div class="col-md-4"><h5>Enlaces rápidos</h5><a href="{% url 'tienda:catalogo' %}">Ver catálogo</a><br><a href="{% url 'tienda:consultar_pedido' %}">Rastrear pedido</a><br><a href="{% url 'login' %}">Iniciar sesión</a></div>
+        <div class="col-md-4"><h5>Contacto</h5><p class="mb-1">Atención comercial y soporte de pedidos.</p><p class="mb-0 small text-light-emphasis">© {% now "Y" %} E-Shop El Progreso</p></div>
       </div>
     </div>
   </footer>
