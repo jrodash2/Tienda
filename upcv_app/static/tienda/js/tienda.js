@@ -22,8 +22,8 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!target) return;
       target.src = thumb.dataset.storeSrc;
       target.alt = thumb.alt || '';
-      document.querySelectorAll('[data-store-thumb]').forEach(function (item) { item.classList.remove('active'); });
-      thumb.classList.add('active');
+      document.querySelectorAll('[data-store-thumb]').forEach(function (item) { item.classList.remove('active','is-active'); });
+      thumb.classList.add('active','is-active');
     });
   });
 
