@@ -1,8 +1,13 @@
+import logging
 from decimal import Decimal
 from django.conf import settings
-from django.db import models
+from django.core.mail import EmailMultiAlternatives
+from django.db import models, transaction
+from django.template.loader import render_to_string
 from django.utils import timezone
 from django.utils.text import slugify
+
+logger = logging.getLogger(__name__)
 
 
 class CategoriaProducto(models.Model):
@@ -195,6 +200,7 @@ class Pedido(models.Model):
         PREPARANDO = 'preparando', 'Preparando'
         ENVIADO = 'enviado', 'Enviado'
         ENTREGADO = 'entregado', 'Entregado'
+        LISTO_RECOGER = 'listo_recoger', 'Listo para recoger en tienda'
         CANCELADO = 'cancelado', 'Cancelado'
         RECHAZADO = 'rechazado', 'Rechazado'
 
@@ -244,11 +250,89 @@ class Pedido(models.Model):
         return self.codigo_pedido
 
     def save(self, *args, **kwargs):
+        estado_anterior = None
+        update_fields = kwargs.get('update_fields')
+        debe_revisar_estado = update_fields is None or 'estado' in update_fields
+
+        if self.pk and debe_revisar_estado:
+            estado_anterior = Pedido.objects.filter(pk=self.pk).values_list('estado', flat=True).first()
+
         if not self.codigo_pedido:
             year = timezone.now().year
             last_id = (Pedido.objects.order_by('-id').values_list('id', flat=True).first() or 0) + 1
             self.codigo_pedido = f'PED-{last_id:06d}-{year}'
         super().save(*args, **kwargs)
+
+        if estado_anterior and estado_anterior != self.estado:
+            pedido_id = self.pk
+            transaction.on_commit(lambda: Pedido.objects.get(pk=pedido_id).enviar_correo_cambio_estado())
+
+    def obtener_email_cliente(self):
+        cliente = getattr(self, 'cliente', None)
+        if cliente:
+            email = getattr(cliente, 'email', None)
+            if email:
+                return email
+            correo = getattr(cliente, 'correo', None)
+            if correo:
+                return correo
+
+        usuario = getattr(self, 'usuario', None)
+        if usuario and getattr(usuario, 'email', None):
+            return usuario.email
+
+        for campo in ('email_cliente', 'correo', 'email'):
+            valor = getattr(self, campo, None)
+            if valor:
+                return valor
+
+        return None
+
+    def obtener_mensaje_estado(self):
+        mensajes = {
+            self.Estado.PENDIENTE: 'Tu pedido ha sido recibido y está pendiente de confirmación.',
+            self.Estado.RECIBIDO: 'Tu pedido fue registrado correctamente y está pendiente de revisión.',
+            self.Estado.PAGO_EN_REVISION: 'Tu comprobante de pago fue recibido y está en revisión.',
+            self.Estado.PAGO_CONFIRMADO: 'El pago de tu pedido fue confirmado.',
+            self.Estado.PREPARANDO: 'Tu pedido está siendo preparado.',
+            self.Estado.ENVIADO: 'Tu pedido ha sido enviado.',
+            self.Estado.ENTREGADO: 'Tu pedido fue entregado.',
+            self.Estado.LISTO_RECOGER: 'Tu pedido ya está listo para recoger en tienda.',
+            self.Estado.CANCELADO: 'Tu pedido fue cancelado.',
+            self.Estado.RECHAZADO: 'Tu pedido fue rechazado.',
+        }
+        return mensajes.get(self.estado, f'Tu pedido cambió al estado: {self.get_estado_display()}')
+
+    def enviar_correo_cambio_estado(self):
+        email_cliente = self.obtener_email_cliente()
+        if not email_cliente:
+            return False
+
+        mensaje_estado = self.obtener_mensaje_estado()
+        contexto = {
+            'pedido': self,
+            'cliente': getattr(self, 'cliente', None),
+            'mensaje_estado': mensaje_estado,
+        }
+        asunto = f'Actualización de tu pedido {self.codigo_pedido}'
+        text_content = render_to_string('tienda/emails/cambio_estado_pedido.txt', contexto)
+        html_content = render_to_string('tienda/emails/cambio_estado_pedido.html', contexto)
+        email = EmailMultiAlternatives(
+            subject=asunto,
+            body=text_content,
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+            to=[email_cliente],
+        )
+        email.attach_alternative(html_content, 'text/html')
+        try:
+            email.send(fail_silently=False)
+            return True
+        except Exception:
+            logger.exception(
+                'Error enviando correo de cambio de estado del pedido %s',
+                getattr(self, 'codigo_pedido', self.pk),
+            )
+            return False
 
 
 class DetallePedido(models.Model):

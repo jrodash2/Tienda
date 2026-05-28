@@ -1,0 +1,16 @@
+Hola{% if cliente %} {{ cliente.nombre_completo|default:cliente }}{% endif %},
+
+Tu pedido {{ pedido.codigo_pedido }} ha cambiado de estado.
+
+Nuevo estado: {{ pedido.get_estado_display }}
+
+{{ mensaje_estado }}
+{% if pedido.estado == 'listo_recoger' %}
+Puedes pasar a recogerlo en nuestro punto de atención.
+{% if pedido.ubicacion_recogida %}
+Lugar de recogida: {{ pedido.ubicacion_recogida.nombre }}
+{{ pedido.ubicacion_recogida.direccion }}
+{% if pedido.ubicacion_recogida.horario %}Horario: {{ pedido.ubicacion_recogida.horario }}{% endif %}
+{% endif %}
+{% endif %}
+Gracias por comprar en nuestra tienda.

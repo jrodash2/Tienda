@@ -46,6 +46,7 @@ def pedido_badge_class(estado):
         'preparando': 'badge-primary',
         'enviado': 'badge-primary',
         'entregado': 'badge-success',
+        'listo_recoger': 'badge-success',
         'cancelado': 'badge-danger',
         'rechazado': 'badge-danger',
     }

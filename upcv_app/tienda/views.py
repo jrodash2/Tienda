@@ -524,6 +524,10 @@ def admin_pedido_detalle(request, pk):
         if accion == 'estado' and estado_form.is_valid():
             estado_form.save()
             messages.success(request, 'Pedido actualizado.')
+        elif accion == 'listo_recoger':
+            pedido.estado = Pedido.Estado.LISTO_RECOGER
+            pedido.save(update_fields=['estado', 'fecha_actualizacion'])
+            messages.success(request, 'Pedido marcado como listo para recoger en tienda.')
         elif accion == 'confirmar_pago':
             pedido.estado_pago = Pedido.EstadoPago.CONFIRMADO
             pedido.estado = Pedido.Estado.PAGO_CONFIRMADO
