@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Actualización de pedido</title>
+</head>
+<body style="font-family: Arial, sans-serif; background:#f6f7fb; padding:20px;">
+    <div style="max-width:600px; margin:auto; background:white; padding:25px; border-radius:12px;">
+        <h2 style="color:#111827;">Actualización de tu pedido</h2>
+
+        <p>Hola{% if cliente %} {{ cliente.nombre_completo|default:cliente }}{% endif %},</p>
+
+        <p>Tu pedido <strong>{{ pedido.codigo_pedido }}</strong> ha cambiado de estado.</p>
+
+        <p>
+            Nuevo estado:
+            <strong style="color:#2563eb;">
+                {{ pedido.get_estado_display }}
+            </strong>
+        </p>
+
+        {% if pedido.estado == 'listo_recoger' %}
+            <div style="background:#ecfdf5; border-left:4px solid #10b981; padding:15px; margin:20px 0;">
+                <strong>Tu pedido ya está listo para recoger en tienda.</strong>
+                <br>
+                Puedes pasar a recogerlo en nuestro punto de atención.
+                {% if pedido.ubicacion_recogida %}
+                    <br><br>
+                    <strong>Lugar de recogida:</strong> {{ pedido.ubicacion_recogida.nombre }}<br>
+                    {{ pedido.ubicacion_recogida.direccion }}
+                    {% if pedido.ubicacion_recogida.horario %}<br><strong>Horario:</strong> {{ pedido.ubicacion_recogida.horario }}{% endif %}
+                {% endif %}
+            </div>
+        {% else %}
+            <p>{{ mensaje_estado }}</p>
+        {% endif %}
+
+        <p>Gracias por comprar en nuestra tienda.</p>
+    </div>
+</body>
+</html>
