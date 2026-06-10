@@ -1,4 +1,5 @@
 {% extends 'tienda/public/base_tienda.html' %}
+{% load moneda_filters %}
 {% block title %}Checkout{% endblock %}
 {% block content %}
 <h1 class="store-section-title mb-4">Finalizar compra</h1>
@@ -73,13 +74,13 @@
       <div class="checkout-summary-box store-summary">
         <h4 class="fw-bold mb-3">Resumen del pedido</h4>
         {% for item in items %}
-          <div class="d-flex justify-content-between gap-3 mb-2"><span>{{ item.cantidad }} x {{ item.producto.nombre }}</span><strong>Q {{ item.subtotal }}</strong></div>
+          <div class="d-flex justify-content-between gap-3 mb-2"><span>{{ item.cantidad }} x {{ item.producto.nombre }}</span><strong>{{ item.subtotal|quetzales }}</strong></div>
         {% endfor %}
         <hr>
-        <div class="d-flex justify-content-between"><span>Subtotal productos</span><b><span id="checkout-subtotal">Q {{ subtotal }}</span></b></div>
-        <div class="d-flex justify-content-between shipping-cost-row"><span>Envío</span><b><span id="checkout-envio">Q {{ envio }}</span></b></div>
+        <div class="d-flex justify-content-between"><span>Subtotal productos</span><b><span id="checkout-subtotal">{{ subtotal|quetzales }}</span></b></div>
+        <div class="d-flex justify-content-between shipping-cost-row"><span>Envío</span><b><span id="checkout-envio">{{ envio|quetzales }}</span></b></div>
         <div class="small text-muted mt-1" id="shippingHelp">El envío se calcula según los productos del carrito.</div>
-        <div class="d-flex justify-content-between fs-4 mt-3"><span>Total</span><b><span id="checkout-total">Q {{ total }}</span></b></div>
+        <div class="d-flex justify-content-between fs-4 mt-3"><span>Total</span><b><span id="checkout-total">{{ total|quetzales }}</span></b></div>
         <button class="btn btn-danger btn-lg w-100 mt-3">Confirmar pedido</button>
         <a class="btn btn-outline-dark w-100 mt-2" href="{% url 'tienda:carrito' %}">Volver al carrito</a>
       </div>
@@ -94,14 +95,20 @@
 
   function parseMoney(value) {
     if (value === null || value === undefined || value === '') return 0;
-    value = String(value).replace('Q', '').replace(/\s/g, '').replace(',', '.');
+    value = String(value).replace('Q', '').replace(/\s/g, '');
+    if (value.includes(',') && !value.includes('.')) {
+      const decimalDigits = value.split(',').pop().length;
+      value = decimalDigits <= 2 ? value.replace(',', '.') : value.replace(/,/g, '');
+    } else {
+      value = value.replace(/,/g, '');
+    }
     const number = Number.parseFloat(value);
     return Number.isFinite(number) ? number : 0;
   }
 
   function formatGTQ(value) {
     const number = Number.isFinite(value) ? value : 0;
-    return 'Q ' + number.toLocaleString('es-GT', {
+    return 'Q' + number.toLocaleString('en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     });

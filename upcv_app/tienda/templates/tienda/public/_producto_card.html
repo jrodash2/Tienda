@@ -1,3 +1,4 @@
+{% load moneda_filters %}
 {% load tienda_extras %}
 {% whatsapp_producto_url producto as whatsapp_url %}
 <div class="store-product-item">
@@ -17,10 +18,10 @@
 
       <div class="store-product-pricing">
         {% if producto.tiene_oferta %}
-          <div class="store-product-old-price">Q {{ producto.precio }}</div>
-          <div class="store-product-price">Q {{ producto.precio_oferta }}</div>
+          <div class="store-product-old-price">{{ producto.precio|quetzales }}</div>
+          <div class="store-product-price">{{ producto.precio_oferta|quetzales }}</div>
         {% else %}
-          <div class="store-product-price">Q {{ producto.precio }}</div>
+          <div class="store-product-price">{{ producto.precio|quetzales }}</div>
         {% endif %}
       </div>
 

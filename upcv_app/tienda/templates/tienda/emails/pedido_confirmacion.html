@@ -1,3 +1,4 @@
+{% load moneda_filters %}
 <!doctype html>
 <html lang="es">
 <head>
@@ -30,9 +31,9 @@
                 <tr><td style="padding:8px;border-bottom:1px solid #eef2f7;color:#6b7280;">Fecha</td><td style="padding:8px;border-bottom:1px solid #eef2f7;text-align:right;">{{ pedido.fecha_creacion|date:'d/m/Y H:i' }}</td></tr>
                 <tr><td style="padding:8px;border-bottom:1px solid #eef2f7;color:#6b7280;">Estado del pedido</td><td style="padding:8px;border-bottom:1px solid #eef2f7;text-align:right;">{{ pedido.get_estado_display }}</td></tr>
                 <tr><td style="padding:8px;border-bottom:1px solid #eef2f7;color:#6b7280;">Estado del pago</td><td style="padding:8px;border-bottom:1px solid #eef2f7;text-align:right;">{{ pedido.get_estado_pago_display }}</td></tr>
-                <tr><td style="padding:8px;border-bottom:1px solid #eef2f7;color:#6b7280;">Subtotal</td><td style="padding:8px;border-bottom:1px solid #eef2f7;text-align:right;">Q {{ pedido.subtotal }}</td></tr>
-                <tr><td style="padding:8px;border-bottom:1px solid #eef2f7;color:#6b7280;">Envío</td><td style="padding:8px;border-bottom:1px solid #eef2f7;text-align:right;">Q {{ pedido.costo_envio }}</td></tr>
-                <tr><td style="padding:10px 8px;font-weight:bold;">Total a pagar</td><td style="padding:10px 8px;text-align:right;font-weight:bold;color:#ed1c24;font-size:18px;">Q {{ pedido.total }}</td></tr>
+                <tr><td style="padding:8px;border-bottom:1px solid #eef2f7;color:#6b7280;">Subtotal</td><td style="padding:8px;border-bottom:1px solid #eef2f7;text-align:right;">{{ pedido.subtotal|quetzales }}</td></tr>
+                <tr><td style="padding:8px;border-bottom:1px solid #eef2f7;color:#6b7280;">Envío</td><td style="padding:8px;border-bottom:1px solid #eef2f7;text-align:right;">{{ pedido.costo_envio|quetzales }}</td></tr>
+                <tr><td style="padding:10px 8px;font-weight:bold;">Total a pagar</td><td style="padding:10px 8px;text-align:right;font-weight:bold;color:#ed1c24;font-size:18px;">{{ pedido.total|quetzales }}</td></tr>
               </table>
 
               <h2 style="font-size:20px;margin:0 0 12px;">Forma de entrega</h2>
@@ -51,7 +52,7 @@
                   <p style="margin:0 0 6px;"><strong>Dirección:</strong> {{ pedido.direccion_entrega|default:pedido.cliente.direccion }}</p>
                   <p style="margin:0 0 6px;"><strong>Departamento:</strong> {{ pedido.departamento_entrega|default:pedido.cliente.departamento }}</p>
                   <p style="margin:0 0 6px;"><strong>Municipio:</strong> {{ pedido.municipio_entrega|default:pedido.cliente.municipio }}</p>
-                  <p style="margin:0;"><strong>Costo de envío:</strong> Q {{ pedido.costo_envio }}</p>
+                  <p style="margin:0;"><strong>Costo de envío:</strong> {{ pedido.costo_envio|quetzales }}</p>
                 {% endif %}
               </div>
 
@@ -62,13 +63,13 @@
                 </thead>
                 <tbody>
                   {% for detalle in detalles %}
-                    <tr><td style="padding:10px;border-bottom:1px solid #eef2f7;">{{ detalle.nombre_producto_snapshot }}<br><span style="color:#6b7280;font-size:12px;">{{ detalle.codigo_sku_snapshot }}</span></td><td align="center" style="padding:10px;border-bottom:1px solid #eef2f7;">{{ detalle.cantidad }}</td><td align="right" style="padding:10px;border-bottom:1px solid #eef2f7;">Q {{ detalle.precio_unitario }}</td><td align="right" style="padding:10px;border-bottom:1px solid #eef2f7;">Q {{ detalle.subtotal }}</td></tr>
+                    <tr><td style="padding:10px;border-bottom:1px solid #eef2f7;">{{ detalle.nombre_producto_snapshot }}<br><span style="color:#6b7280;font-size:12px;">{{ detalle.codigo_sku_snapshot }}</span></td><td align="center" style="padding:10px;border-bottom:1px solid #eef2f7;">{{ detalle.cantidad }}</td><td align="right" style="padding:10px;border-bottom:1px solid #eef2f7;">{{ detalle.precio_unitario|quetzales }}</td><td align="right" style="padding:10px;border-bottom:1px solid #eef2f7;">{{ detalle.subtotal|quetzales }}</td></tr>
                   {% endfor %}
                 </tbody>
               </table>
 
               <h2 style="font-size:20px;margin:0 0 12px;">Pago por transferencia</h2>
-              <p style="margin:0 0 12px;">Total a transferir: <strong>Q {{ pedido.total }}</strong></p>
+              <p style="margin:0 0 12px;">Total a transferir: <strong>{{ pedido.total|quetzales }}</strong></p>
               {% if cuentas_bancarias %}
                 {% for cuenta in cuentas_bancarias %}
                   <div style="border:1px solid #e5e7eb;border-radius:14px;padding:14px;margin-bottom:10px;background:#f9fafb;">

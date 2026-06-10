@@ -1,4 +1,5 @@
 {% extends 'tienda/public/base_tienda.html' %}
+{% load moneda_filters %}
 {% load tienda_extras %}
 {% block title %}{{ producto.nombre }}{% endblock %}
 {% block content %}
@@ -42,10 +43,10 @@
 
       <div class="product-pricing">
         {% if producto.tiene_oferta %}
-          <span class="product-old-price">Q {{ producto.precio }}</span>
-          <span class="product-price">Q {{ producto.precio_oferta }}</span>
+          <span class="product-old-price">{{ producto.precio|quetzales }}</span>
+          <span class="product-price">{{ producto.precio_oferta|quetzales }}</span>
         {% else %}
-          <span class="product-price">Q {{ producto.precio }}</span>
+          <span class="product-price">{{ producto.precio|quetzales }}</span>
         {% endif %}
       </div>
 
