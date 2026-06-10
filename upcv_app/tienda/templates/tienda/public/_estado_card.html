@@ -1,3 +1,4 @@
+{% load moneda_filters %}
 {% load tienda_extras %}
 {% with pago=pedido.estado_pago %}
 <div class="order-status-card mb-4">
@@ -16,19 +17,19 @@
     <div class="col-md-4">
       <div class="order-metric-card">
         <span>Total</span>
-        <strong>Q {{ pedido.total }}</strong>
+        <strong>{{ pedido.total|quetzales }}</strong>
       </div>
     </div>
     <div class="col-md-4">
       <div class="order-metric-card">
         <span>Subtotal</span>
-        <strong>Q {{ pedido.subtotal }}</strong>
+        <strong>{{ pedido.subtotal|quetzales }}</strong>
       </div>
     </div>
     <div class="col-md-4">
       <div class="order-metric-card">
         <span>Envío</span>
-        <strong>Q {{ pedido.costo_envio }}</strong>
+        <strong>{{ pedido.costo_envio|quetzales }}</strong>
       </div>
     </div>
   </div>
@@ -49,7 +50,7 @@
       <p class="mb-1"><strong>Dirección:</strong> {{ pedido.direccion_entrega|default:pedido.cliente.direccion }}</p>
       <p class="mb-1"><strong>Departamento:</strong> {{ pedido.departamento_entrega|default:pedido.cliente.departamento }}</p>
       <p class="mb-1"><strong>Municipio:</strong> {{ pedido.municipio_entrega|default:pedido.cliente.municipio }}</p>
-      <p class="mb-0"><strong>Costo de envío:</strong> Q {{ pedido.costo_envio }}</p>
+      <p class="mb-0"><strong>Costo de envío:</strong> {{ pedido.costo_envio|quetzales }}</p>
     {% endif %}
   </div>
 
@@ -97,8 +98,8 @@
                   </div>
                 </td>
                 <td>{{ d.cantidad }}</td>
-                <td>Q {{ d.precio_unitario }}</td>
-                <td><strong>Q {{ d.subtotal }}</strong></td>
+                <td>{{ d.precio_unitario|quetzales }}</td>
+                <td><strong>{{ d.subtotal|quetzales }}</strong></td>
               </tr>
             {% endfor %}
           </tbody>
@@ -112,7 +113,7 @@
   <div class="col-lg-6">
     <div class="order-summary-card h-100">
       <h4 class="fw-bold mb-2">Pago por transferencia</h4>
-      <p class="text-muted">Total a pagar: <strong>Q {{ pedido.total }}</strong></p>
+      <p class="text-muted">Total a pagar: <strong>{{ pedido.total|quetzales }}</strong></p>
       {% if puede_subir_comprobante %}
         <p class="mb-3">Realice la transferencia y suba su comprobante para que podamos validar el pago.</p>
         {% for cuenta in cuentas %}

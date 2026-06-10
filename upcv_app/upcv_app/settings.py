@@ -178,3 +178,8 @@ EMAIL_HOST_USER = 'jrrodas@gmail.com'
 EMAIL_HOST_PASSWORD = 'gaic ijvr emrh zaxq'  
 
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
+ADMIN_ORDER_EMAIL = os.getenv(
+    'ADMIN_ORDER_EMAIL',
+    DEFAULT_FROM_EMAIL,
+)

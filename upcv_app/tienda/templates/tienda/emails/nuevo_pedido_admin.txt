@@ -1,0 +1,13 @@
+Hola administrador,
+
+Se ha recibido un nuevo pedido en la tienda en línea.
+
+Pedido: #{{ pedido.id }}
+Cliente: {{ cliente_nombre }}
+Teléfono: {{ cliente_telefono }}
+Correo: {{ cliente_email }}
+Total: {{ total_formateado }}
+Método de entrega: {{ metodo_entrega }}
+Estado actual: {{ estado }}
+
+Por favor ingresa al panel administrativo para revisar el pedido, confirmar el pago y continuar con el proceso correspondiente.

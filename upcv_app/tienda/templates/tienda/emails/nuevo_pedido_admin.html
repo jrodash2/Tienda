@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Nuevo pedido recibido</title>
+</head>
+<body style="font-family: Arial, sans-serif; background:#f6f7fb; padding:20px;">
+    <div style="max-width:650px; margin:auto; background:#ffffff; padding:25px; border-radius:12px;">
+        <h2 style="color:#111827; margin-bottom:10px;">
+            Nuevo pedido recibido
+        </h2>
+
+        <p>Hola administrador,</p>
+
+        <p>
+            Se ha recibido un nuevo pedido en la tienda en línea.
+        </p>
+
+        <table style="width:100%; border-collapse:collapse; margin-top:20px;">
+            <tr>
+                <td style="padding:8px; border-bottom:1px solid #e5e7eb;"><strong>Pedido:</strong></td>
+                <td style="padding:8px; border-bottom:1px solid #e5e7eb;">#{{ pedido.id }}</td>
+            </tr>
+            <tr>
+                <td style="padding:8px; border-bottom:1px solid #e5e7eb;"><strong>Cliente:</strong></td>
+                <td style="padding:8px; border-bottom:1px solid #e5e7eb;">{{ cliente_nombre }}</td>
+            </tr>
+            <tr>
+                <td style="padding:8px; border-bottom:1px solid #e5e7eb;"><strong>Teléfono:</strong></td>
+                <td style="padding:8px; border-bottom:1px solid #e5e7eb;">{{ cliente_telefono }}</td>
+            </tr>
+            <tr>
+                <td style="padding:8px; border-bottom:1px solid #e5e7eb;"><strong>Correo:</strong></td>
+                <td style="padding:8px; border-bottom:1px solid #e5e7eb;">{{ cliente_email }}</td>
+            </tr>
+            <tr>
+                <td style="padding:8px; border-bottom:1px solid #e5e7eb;"><strong>Total:</strong></td>
+                <td style="padding:8px; border-bottom:1px solid #e5e7eb;">{{ total_formateado }}</td>
+            </tr>
+            <tr>
+                <td style="padding:8px; border-bottom:1px solid #e5e7eb;"><strong>Método de entrega:</strong></td>
+                <td style="padding:8px; border-bottom:1px solid #e5e7eb;">{{ metodo_entrega }}</td>
+            </tr>
+            <tr>
+                <td style="padding:8px; border-bottom:1px solid #e5e7eb;"><strong>Estado actual:</strong></td>
+                <td style="padding:8px; border-bottom:1px solid #e5e7eb;">{{ estado }}</td>
+            </tr>
+        </table>
+
+        <p style="margin-top:20px;">
+            Por favor ingresa al panel administrativo para revisar el pedido,
+            confirmar el pago y continuar con el proceso correspondiente.
+        </p>
+    </div>
+</body>
+</html>

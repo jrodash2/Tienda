@@ -1,4 +1,5 @@
 {% extends 'tienda/public/base_tienda.html' %}
+{% load moneda_filters %}
 {% load tienda_extras %}
 
 {% block title %}Pedido {{ pedido.codigo_pedido }} | Pago por transferencia{% endblock %}
@@ -32,7 +33,7 @@
             <p class="mb-1"><strong>Dirección:</strong> {{ pedido.direccion_entrega|default:pedido.cliente.direccion }}</p>
             <p class="mb-1"><strong>Departamento:</strong> {{ pedido.departamento_entrega|default:pedido.cliente.departamento }}</p>
             <p class="mb-1"><strong>Municipio:</strong> {{ pedido.municipio_entrega|default:pedido.cliente.municipio }}</p>
-            <p class="mb-0"><strong>Costo de envío:</strong> Q {{ pedido.costo_envio }}</p>
+            <p class="mb-0"><strong>Costo de envío:</strong> {{ pedido.costo_envio|quetzales }}</p>
           {% endif %}
         </div>
         <p class="text-muted mb-0">Para completar su compra, realice la transferencia bancaria por el monto indicado y luego suba el comprobante desde esta pantalla o desde la opción Rastrear pedido.</p>
@@ -40,7 +41,7 @@
       <div class="col-lg-4">
         <div class="payment-total-card">
           <p class="mb-1">Total a pagar</p>
-          <h2 class="fw-bold">Q {{ pedido.total }}</h2>
+          <h2 class="fw-bold">{{ pedido.total|quetzales }}</h2>
           <hr class="border-light opacity-50">
           <p class="mb-2">Pedido <span class="store-status-badge {{ pedido.estado|pedido_badge_class }}">{{ pedido.get_estado_display }}</span></p>
           <p class="mb-0">Pago <span class="store-status-badge {{ pedido.estado_pago|pago_badge_class }}">{{ pedido.get_estado_pago_display }}</span></p>

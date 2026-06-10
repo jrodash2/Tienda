@@ -1,3 +1,4 @@
+{% load moneda_filters %}
 Gracias por su pedido en {{ site_name }}.
 
 Hola {{ cliente.nombres }}, hemos recibido su pedido correctamente.
@@ -9,9 +10,9 @@ Resumen del pedido
 Fecha: {{ pedido.fecha_creacion|date:'d/m/Y H:i' }}
 Estado del pedido: {{ pedido.get_estado_display }}
 Estado del pago: {{ pedido.get_estado_pago_display }}
-Subtotal: Q {{ pedido.subtotal }}
-Envío: Q {{ pedido.costo_envio }}
-Total a pagar: Q {{ pedido.total }}
+Subtotal: {{ pedido.subtotal|quetzales }}
+Envío: {{ pedido.costo_envio|quetzales }}
+Total a pagar: {{ pedido.total|quetzales }}
 
 Forma de entrega
 {% if pedido.tipo_entrega == 'recoger_tienda' %}Recoger en tienda
@@ -24,13 +25,13 @@ Dirección: {{ pedido.ubicacion_recogida.direccion }}
 Dirección: {{ pedido.direccion_entrega|default:pedido.cliente.direccion }}
 Departamento: {{ pedido.departamento_entrega|default:pedido.cliente.departamento }}
 Municipio: {{ pedido.municipio_entrega|default:pedido.cliente.municipio }}
-Costo de envío: Q {{ pedido.costo_envio }}
+Costo de envío: {{ pedido.costo_envio|quetzales }}
 {% endif %}
 Productos
-{% for detalle in detalles %}- {{ detalle.nombre_producto_snapshot }} | Cantidad: {{ detalle.cantidad }} | Precio unitario: Q {{ detalle.precio_unitario }} | Subtotal: Q {{ detalle.subtotal }}
+{% for detalle in detalles %}- {{ detalle.nombre_producto_snapshot }} | Cantidad: {{ detalle.cantidad }} | Precio unitario: {{ detalle.precio_unitario|quetzales }} | Subtotal: {{ detalle.subtotal|quetzales }}
 {% endfor %}
 Pago por transferencia
-Total a pagar: Q {{ pedido.total }}
+Total a pagar: {{ pedido.total|quetzales }}
 {% if cuentas_bancarias %}Cuentas bancarias activas:
 {% for cuenta in cuentas_bancarias %}- {{ cuenta.banco }} | {{ cuenta.nombre_cuenta }} | Cuenta {{ cuenta.tipo_cuenta }}: {{ cuenta.numero_cuenta }} | Moneda: {{ cuenta.moneda }}{% if cuenta.instrucciones %} | {{ cuenta.instrucciones }}{% endif %}
 {% endfor %}{% else %}No hay cuentas bancarias activas configuradas. Comuníquese con la tienda para recibir instrucciones de pago.
