@@ -19,34 +19,42 @@
   </div>
   <div class="pos-layout">
     <section class="pos-panel pos-cart-panel" id="posCartPanel">
-      <div class="pos-panel-header d-flex justify-content-between align-items-center">
-        <div><h5 class="mb-1">Venta actual</h5><small id="clienteActualDetalle" class="text-muted">Walk-in customer</small></div>
-        <button class="btn btn-sm btn-pos-primary" data-bs-toggle="modal" data-bs-target="#modalCliente">+ Cliente</button>
-      </div>
-      <div class="pos-cart-items" id="carritoItems"><div class="pos-empty">No hay productos agregados</div></div>
-      <div class="pos-summary">
-        <div class="row g-2 mb-2">
-          <div class="col-6"><label class="small">Descuento</label><input class="form-control form-control-sm" id="descuentoValor" type="number" step="0.01" min="0" value="0"></div>
-          <div class="col-6"><label class="small">Tipo</label><select class="form-select form-select-sm" id="descuentoTipo"><option value="fijo">Fijo</option><option value="porcentaje">Porcentaje</option></select></div>
-          <div class="col-6"><label class="small">Impuesto %</label><input class="form-control form-control-sm" id="impuestoPorcentaje" type="number" step="0.01" min="0" value="0"></div>
-          <div class="col-6"><label class="small">Envío Q</label><input class="form-control form-control-sm" id="envioValor" type="number" step="0.01" min="0" value="0"></div>
+      <div class="pos-cart-header">
+        <div>
+          <h3>Venta actual</h3>
+          <small id="clienteActualDetalle">Walk-in customer</small>
         </div>
-        <div class="pos-summary-row"><span>Cantidad total</span><strong id="cantidadTotal">0</strong></div>
-        <div class="pos-summary-row"><span>Subtotal</span><strong id="subtotalVenta">Q0.00</strong></div>
-        <div class="pos-summary-row"><span>Descuento</span><strong id="descuentoTotal">Q0.00</strong></div>
-        <div class="pos-summary-row"><span>Impuesto</span><strong id="impuestoTotal">Q0.00</strong></div>
-        <div class="pos-summary-row"><span>Envío</span><strong id="envioTotal">Q0.00</strong></div>
-        <div class="pos-summary-row pos-total"><span>Total</span><span id="totalVenta">Q0.00</span></div>
-        <div class="pos-summary-row"><span>Pagado actual</span><strong id="pagadoTotal">Q0.00</strong></div>
-        <div class="pos-summary-row"><span>Saldo pendiente</span><strong id="saldoTotal">Q0.00</strong></div>
+        <button class="btn btn-sm btn-pos-primary" data-bs-toggle="modal" data-bs-target="#modalCliente" type="button">+ Cliente</button>
       </div>
-      <div class="pos-actions">
-        <button id="btnMantener" class="btn btn-outline-secondary btn-lg" type="button">Mantener</button>
-        <button id="btnReiniciar" class="btn btn-pos-danger btn-lg" type="button">Reiniciar</button>
-        <button id="btnPendiente" class="btn btn-outline-primary btn-lg" type="button" disabled>Guardar pendiente</button>
-        <button id="btnGuardarCotizacion" class="btn btn-warning btn-lg" type="button" disabled>Guardar como cotización</button>
-        <button id="btnPagar" class="btn btn-pay btn-lg" type="button" disabled>Pagar ahora</button>
-        <a id="btnComprobante" class="btn btn-outline-dark btn-lg disabled" href="#" target="_blank">Generar comprobante</a>
+      <div class="pos-cart-items" id="carritoItems"><div class="pos-empty-cart">No hay productos agregados</div></div>
+      <div class="pos-cart-summary">
+        <div class="pos-total-row"><span class="pos-total-label">Total</span><span class="pos-total-amount" id="totalVenta">Q0.00</span></div>
+        <div class="pos-paid-row">
+          <div class="pos-paid-box"><span>Pagado</span><strong id="pagadoTotal">Q0.00</strong></div>
+          <div class="pos-paid-box"><span>Saldo</span><strong id="saldoTotal">Q0.00</strong></div>
+        </div>
+        <div class="pos-adjustments-grid">
+          <div class="pos-adjustment-field"><label>Descuento</label><input class="form-control" id="descuentoValor" type="number" step="0.01" min="0" value="0"></div>
+          <div class="pos-adjustment-field"><label>Tipo</label><select class="form-select" id="descuentoTipo"><option value="fijo">Fijo</option><option value="porcentaje">Porcentaje</option></select></div>
+          <div class="pos-adjustment-field"><label>Impuesto %</label><input class="form-control" id="impuestoPorcentaje" type="number" step="0.01" min="0" value="0"></div>
+          <div class="pos-adjustment-field"><label>Envío Q</label><input class="form-control" id="envioValor" type="number" step="0.01" min="0" value="0"></div>
+        </div>
+        <button type="button" class="pos-breakdown-toggle" data-bs-toggle="collapse" data-bs-target="#posBreakdown">Ver desglose</button>
+        <div class="collapse" id="posBreakdown">
+          <div class="pos-breakdown-row"><span>Cantidad total</span><strong id="cantidadTotal">0</strong></div>
+          <div class="pos-breakdown-row"><span>Subtotal</span><strong id="subtotalVenta">Q0.00</strong></div>
+          <div class="pos-breakdown-row"><span>Descuento</span><strong id="descuentoTotal">Q0.00</strong></div>
+          <div class="pos-breakdown-row"><span>Impuesto</span><strong id="impuestoTotal">Q0.00</strong></div>
+          <div class="pos-breakdown-row"><span>Envío</span><strong id="envioTotal">Q0.00</strong></div>
+        </div>
+      </div>
+      <div class="pos-cart-actions">
+        <button id="btnMantener" class="btn btn-outline-secondary" type="button">Mantener</button>
+        <button id="btnPendiente" class="btn btn-outline-primary" type="button" disabled>Pendiente</button>
+        <button id="btnGuardarCotizacion" class="btn btn-warning" type="button" disabled>Cotización</button>
+        <button id="btnReiniciar" class="btn btn-pos-danger" type="button">Reiniciar</button>
+        <button id="btnPagar" class="btn btn-pay" type="button" disabled>Pagar</button>
+        <a id="btnComprobante" class="btn btn-outline-dark disabled" href="#" target="_blank">Comprobante</a>
       </div>
     </section>
     <section class="pos-panel pos-products-panel">

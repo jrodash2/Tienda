@@ -48,15 +48,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderCarrito() {
     if (!state.carrito.length) {
-      $('carritoItems').innerHTML = '<div class="pos-empty">No hay productos agregados</div>';
+      $('carritoItems').innerHTML = '<div class="pos-empty-cart">No hay productos agregados</div>';
       calcularTotales();
       return;
     }
     $('carritoItems').innerHTML = state.carrito.map(item => `
-      <div class="pos-cart-line">
-        <div><strong>${item.nombre}</strong><br><small>${item.codigo} · ${money(item.precio)} · Stock ${item.stock}</small><br><strong>${money(item.precio * item.cantidad)}</strong></div>
-        <div class="pos-qty"><button class="btn btn-sm btn-light" data-action="menos" data-id="${item.id}">-</button><input class="form-control form-control-sm" data-action="cantidad" data-id="${item.id}" type="number" min="1" max="${item.stock}" value="${item.cantidad}"><button class="btn btn-sm btn-light" data-action="mas" data-id="${item.id}">+</button></div>
-        <button class="btn btn-sm btn-outline-danger" data-action="quitar" data-id="${item.id}">×</button>
+      <div class="pos-cart-item">
+        <div>
+          <div class="pos-cart-item-name">${item.nombre}</div>
+          <div class="pos-cart-item-meta">${item.codigo || ''} · ${money(item.precio)} · Stock ${item.stock}</div>
+          <div class="pos-qty-controls">
+            <button type="button" class="pos-qty-btn" data-action="menos" data-id="${item.id}">-</button>
+            <input class="pos-qty-input" data-action="cantidad" data-id="${item.id}" type="number" min="1" max="${item.stock}" value="${item.cantidad}">
+            <button type="button" class="pos-qty-btn" data-action="mas" data-id="${item.id}">+</button>
+            <button type="button" class="pos-remove-btn" data-action="quitar" data-id="${item.id}">×</button>
+          </div>
+        </div>
+        <div class="pos-cart-item-total">${money(item.precio * item.cantidad)}</div>
       </div>`).join('');
     calcularTotales();
   }
