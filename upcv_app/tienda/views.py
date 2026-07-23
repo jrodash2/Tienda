@@ -2,7 +2,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q, Sum
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -11,9 +11,10 @@ from almacen_app.utils import grupo_requerido
 from .cart import add_to_cart as session_add, calcular_envio_items, cart_items, clear_cart, remove_from_cart as session_remove, update_cart as session_update
 from .forms import (
     CambiarEstadoPedidoForm, CategoriaProductoForm, CheckoutForm, ComprobanteTransferenciaForm,
-    CuentaBancariaForm, MarcaProductoForm, ProductoForm, RechazarPagoForm, UbicacionTiendaForm,
+    CuentaBancariaForm, MarcaProductoForm, ProductoForm, RechazarPagoForm, UbicacionTiendaForm, ClienteForm, PagoVentaForm,
 )
-from .models import CategoriaProducto, ClientePedido, CuentaBancaria, DetallePedido, ImagenProducto, MarcaProducto, Pedido, Producto, UbicacionTienda
+from .models import CategoriaProducto, ClientePedido, CuentaBancaria, DetallePedido, ImagenProducto, MarcaProducto, Pedido, Producto, UbicacionTienda, Cliente, Venta, DetalleVenta
+from .services.pos_service import agregar_pago_venta, anular_venta, crear_venta_pos
 from .services.email_service import programar_correo_confirmacion_pedido, programar_correo_nuevo_pedido_admin
 
 ENVIO_DEFAULT = Decimal('0.00')
@@ -280,6 +281,7 @@ def checkout(request):
                         subtotal=subtotal_linea,
                         costo_envio_unitario=envio_unitario,
                         costo_envio_total=envio_linea,
+                        precio_costo_unitario=producto.precio_costo or Decimal('0.00'),
                     )
                     producto.stock -= cantidad
                     producto.save(update_fields=['stock', 'fecha_actualizacion'])
@@ -582,21 +584,110 @@ def admin_cuenta_form(request, pk=None):
     return _crud_list_form(request, CuentaBancaria, CuentaBancariaForm, 'tienda/admin/cuentas/lista.html', 'tienda/admin/cuentas/form.html', 'tienda:admin_cuentas', pk)
 
 
+def _parse_pos_items(post):
+    items = []
+    for producto_id in post.getlist('producto_id'):
+        cantidad = post.get(f'cantidad_{producto_id}', '1')
+        items.append({'producto_id': producto_id, 'cantidad': cantidad})
+    return items
+
+
 @login_required
 @grupo_requerido('Administrador', 'Tienda', 'Ventas')
+def pos(request):
+    productos = Producto.objects.filter(activo=True, permite_compra=True).order_by('nombre')
+    q = request.GET.get('q', '').strip()
+    if q:
+        productos = productos.filter(Q(nombre__icontains=q) | Q(codigo_sku__icontains=q))
+    cliente_form = ClienteForm(prefix='cliente')
+    if request.method == 'POST':
+        accion = request.POST.get('accion')
+        if accion == 'crear_cliente':
+            cliente_form = ClienteForm(request.POST, prefix='cliente')
+            if cliente_form.is_valid():
+                cliente = cliente_form.save()
+                messages.success(request, 'Cliente creado y seleccionado.')
+                return redirect(f'{request.path}?cliente={cliente.pk}')
+        else:
+            try:
+                cliente = Cliente.objects.filter(pk=request.POST.get('cliente')).first()
+                venta = crear_venta_pos(usuario=request.user, cliente=cliente, items=_parse_pos_items(request.POST), monto_pagado=request.POST.get('monto_pagado', '0'), metodo_pago=request.POST.get('metodo_pago', 'efectivo'), referencia=request.POST.get('referencia', ''), observaciones=request.POST.get('observaciones', ''))
+                messages.success(request, 'Venta registrada correctamente.')
+                return redirect('tienda:pos_comprobante', pk=venta.pk)
+            except Exception as exc:
+                messages.error(request, str(exc))
+    return render(request, 'tienda/pos/pos.html', {'productos': productos[:60], 'clientes': Cliente.objects.all(), 'cliente_form': cliente_form, 'metodos_pago': [('efectivo','Efectivo'),('transferencia','Transferencia'),('tarjeta','Tarjeta'),('deposito','Depósito'),('otro','Otro')], 'cliente_seleccionado': request.GET.get('cliente')})
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+def pos_comprobante(request, pk):
+    venta = get_object_or_404(Venta.objects.select_related('cliente', 'usuario').prefetch_related('detalles__producto', 'pagos'), pk=pk)
+    return render(request, 'tienda/pos/comprobante.html', {'venta': venta, 'ultimo_pago': venta.pagos.first()})
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+def agregar_pago_pos(request, pk):
+    venta = get_object_or_404(Venta.objects.select_related('cliente').prefetch_related('pagos', 'detalles'), pk=pk)
+    form = PagoVentaForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        try:
+            agregar_pago_venta(venta=venta, usuario=request.user, **form.cleaned_data)
+            messages.success(request, 'Pago registrado correctamente.')
+            return redirect('tienda:pos_comprobante', pk=venta.pk)
+        except Exception as exc:
+            messages.error(request, str(exc))
+    return render(request, 'tienda/pos/agregar_pago.html', {'venta': venta, 'form': form})
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+def anular_venta_pos(request, pk):
+    venta = get_object_or_404(Venta, pk=pk)
+    if request.method == 'POST':
+        anular_venta(venta)
+        messages.warning(request, 'Venta anulada y stock devuelto.')
+    return redirect('tienda:admin_reportes')
+
+
 def admin_reportes(request):
     desde = request.GET.get('desde')
     hasta = request.GET.get('hasta')
-    ventas = Pedido.objects.filter(estado_pago=Pedido.EstadoPago.CONFIRMADO)
+    estado = request.GET.get('estado')
+    cliente_q = request.GET.get('cliente', '').strip()
+    origen = request.GET.get('origen')
+    ventas = Venta.objects.exclude(estado='anulado').select_related('cliente')
     if desde:
-        ventas = ventas.filter(fecha_creacion__date__gte=desde)
+        ventas = ventas.filter(fecha__date__gte=desde)
     if hasta:
-        ventas = ventas.filter(fecha_creacion__date__lte=hasta)
+        ventas = ventas.filter(fecha__date__lte=hasta)
+    if estado:
+        ventas = ventas.filter(estado=estado)
+    if origen:
+        ventas = ventas.filter(origen=origen)
+    if cliente_q:
+        ventas = ventas.filter(Q(cliente__nombre__icontains=cliente_q) | Q(cliente__telefono__icontains=cliente_q) | Q(cliente__nit__icontains=cliente_q))
+
+    detalle_expr = ExpressionWrapper(F('precio_unitario') * F('cantidad'), output_field=DecimalField(max_digits=12, decimal_places=2))
+    costo_expr = ExpressionWrapper(F('precio_costo_unitario') * F('cantidad'), output_field=DecimalField(max_digits=12, decimal_places=2))
+    detalles = DetalleVenta.objects.filter(venta__in=ventas)
+    total_vendido = detalles.aggregate(s=Sum(detalle_expr))['s'] or Decimal('0.00')
+    costo_total = detalles.aggregate(s=Sum(costo_expr))['s'] or Decimal('0.00')
+    total_pagado = ventas.aggregate(s=Sum('pagos__monto'))['s'] or Decimal('0.00')
+    ventas_por_dia = list(detalles.values('venta__fecha__date').annotate(total=Sum(detalle_expr), costo=Sum(costo_expr)).order_by('venta__fecha__date'))
+    for dia in ventas_por_dia:
+        dia['ganancia'] = (dia['total'] or Decimal('0.00')) - (dia['costo'] or Decimal('0.00'))
     return render(request, 'tienda/admin/reportes.html', {
-        'total_ventas': ventas.aggregate(s=Sum('total'))['s'] or 0,
-        'pedidos_estado': Pedido.objects.values('estado').annotate(total=Count('id')),
-        'pedidos_tipo_entrega': Pedido.objects.values('tipo_entrega').annotate(total=Count('id')),
-        'total_envios': ventas.aggregate(s=Sum('costo_envio'))['s'] or 0,
-        'mas_vendidos': DetallePedido.objects.values('nombre_producto_snapshot').annotate(cantidad=Sum('cantidad')).order_by('-cantidad')[:10],
-        'bajo_stock': Producto.objects.filter(stock__lte=5).order_by('stock')[:20],
+        'ventas': ventas.prefetch_related('detalles', 'pagos'),
+        'total_vendido': total_vendido,
+        'costo_total': costo_total,
+        'ganancia_total': total_vendido - costo_total,
+        'cantidad_ventas': ventas.count(),
+        'ticket_promedio': (total_vendido / ventas.count()) if ventas.count() else Decimal('0.00'),
+        'total_pagado': total_pagado,
+        'saldo_pendiente': total_vendido - total_pagado,
+        'ventas_por_dia': ventas_por_dia,
+        'estados': Venta.ESTADOS,
+        'origenes': Venta.ORIGENES,
     })

@@ -62,6 +62,7 @@ class Producto(models.Model):
     descripcion_larga = models.TextField(blank=True)
     codigo_sku = models.CharField(max_length=80, unique=True)
     precio = models.DecimalField(max_digits=12, decimal_places=2)
+    precio_costo = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'), verbose_name='Precio de costo')
     precio_oferta = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True)
     stock = models.PositiveIntegerField(default=0)
     costo_envio = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'), help_text='Indique el costo de envío de este producto. Si es 0, se considerará envío gratuito para este producto.')
@@ -125,6 +126,16 @@ class Producto(models.Model):
     @property
     def disponible_para_compra(self):
         return self.activo and self.mostrar_en_catalogo and self.permite_compra and self.stock > 0
+
+    @property
+    def ganancia_unitaria(self):
+        return (self.precio_actual or Decimal('0.00')) - (self.precio_costo or Decimal('0.00'))
+
+    @property
+    def margen_ganancia(self):
+        if self.precio_costo and self.precio_costo > 0:
+            return (self.ganancia_unitaria / self.precio_costo) * 100
+        return Decimal('0.00')
 
 
 class ImagenProducto(models.Model):
@@ -345,12 +356,129 @@ class DetallePedido(models.Model):
     subtotal = models.DecimalField(max_digits=12, decimal_places=2)
     costo_envio_unitario = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
     costo_envio_total = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    precio_costo_unitario = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
 
     class Meta:
         ordering = ['id']
 
     def __str__(self):
         return f'{self.cantidad} x {self.nombre_producto_snapshot}'
+
+    @property
+    def costo_total(self):
+        return self.precio_costo_unitario * self.cantidad
+
+    @property
+    def ganancia_total(self):
+        return self.subtotal - self.costo_total
+
+
+class Cliente(models.Model):
+    nombre = models.CharField(max_length=150)
+    telefono = models.CharField(max_length=20, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    direccion = models.TextField(blank=True, null=True)
+    nit = models.CharField(max_length=20, blank=True, null=True)
+    dpi = models.CharField(max_length=20, blank=True, null=True)
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['nombre']
+
+    def __str__(self):
+        return self.nombre
+
+
+class Venta(models.Model):
+    ESTADOS = [('pendiente', 'Pendiente'), ('pagado_parcial', 'Pagado parcial'), ('pagado', 'Pagado'), ('anulado', 'Anulado')]
+    ORIGENES = [('pos', 'POS'), ('tienda', 'Tienda en línea')]
+    cliente = models.ForeignKey(Cliente, on_delete=models.SET_NULL, null=True, blank=True, related_name='ventas')
+    origen = models.CharField(max_length=20, choices=ORIGENES, default='pos')
+    estado = models.CharField(max_length=30, choices=ESTADOS, default='pendiente')
+    fecha = models.DateTimeField(auto_now_add=True)
+    observaciones = models.TextField(blank=True, null=True)
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='ventas_pos')
+    stock_descontado = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['-fecha']
+        permissions = [('acceder_pos', 'Puede acceder al POS'), ('ver_dashboard_ventas', 'Puede ver dashboard de ventas')]
+
+    def __str__(self):
+        return f'Venta #{self.pk or 0:06d}'
+
+    @property
+    def total(self):
+        return sum((detalle.subtotal for detalle in self.detalles.all()), Decimal('0.00'))
+
+    @property
+    def costo_total(self):
+        return sum((detalle.costo_total for detalle in self.detalles.all()), Decimal('0.00'))
+
+    @property
+    def ganancia_total(self):
+        return self.total - self.costo_total
+
+    @property
+    def total_pagado(self):
+        return sum((pago.monto for pago in self.pagos.all()), Decimal('0.00'))
+
+    @property
+    def saldo_pendiente(self):
+        saldo = self.total - self.total_pagado
+        return saldo if saldo > 0 else Decimal('0.00')
+
+    def actualizar_estado_pago(self, commit=True):
+        if self.estado == 'anulado':
+            return self.estado
+        total_pagado = self.total_pagado
+        total = self.total
+        if total_pagado >= total and total > 0:
+            self.estado = 'pagado'
+        elif total_pagado > 0:
+            self.estado = 'pagado_parcial'
+        else:
+            self.estado = 'pendiente'
+        if commit:
+            self.save(update_fields=['estado'])
+        return self.estado
+
+
+class DetalleVenta(models.Model):
+    venta = models.ForeignKey(Venta, related_name='detalles', on_delete=models.CASCADE)
+    producto = models.ForeignKey(Producto, on_delete=models.PROTECT, related_name='detalles_venta')
+    cantidad = models.PositiveIntegerField(default=1)
+    precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
+    precio_costo_unitario = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+
+    @property
+    def subtotal(self):
+        return self.precio_unitario * self.cantidad
+
+    @property
+    def costo_total(self):
+        return self.precio_costo_unitario * self.cantidad
+
+    @property
+    def ganancia_total(self):
+        return self.subtotal - self.costo_total
+
+
+class PagoVenta(models.Model):
+    METODOS_PAGO = [('efectivo', 'Efectivo'), ('transferencia', 'Transferencia'), ('tarjeta', 'Tarjeta'), ('deposito', 'Depósito'), ('otro', 'Otro')]
+    venta = models.ForeignKey(Venta, related_name='pagos', on_delete=models.CASCADE)
+    monto = models.DecimalField(max_digits=10, decimal_places=2)
+    metodo_pago = models.CharField(max_length=30, choices=METODOS_PAGO, default='efectivo')
+    referencia = models.CharField(max_length=100, blank=True, null=True)
+    fecha = models.DateTimeField(auto_now_add=True)
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='pagos_venta')
+    observaciones = models.TextField(blank=True, null=True)
+
+    class Meta:
+        ordering = ['-fecha']
+
+    def __str__(self):
+        return f'Pago {self.monto} - {self.venta}'
 
 
 class CuentaBancaria(models.Model):
