@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import CategoriaProducto, MarcaProducto, Producto, ImagenProducto, ClientePedido, Pedido, DetallePedido, CuentaBancaria, UbicacionTienda
+from .models import CategoriaProducto, MarcaProducto, Producto, ImagenProducto, ClientePedido, Pedido, DetallePedido, CuentaBancaria, UbicacionTienda, Cliente, Venta, DetalleVenta, PagoVenta
 
 
 class ImagenProductoInline(admin.TabularInline):
@@ -26,7 +26,7 @@ class MarcaProductoAdmin(admin.ModelAdmin):
 
 @admin.register(Producto)
 class ProductoAdmin(admin.ModelAdmin):
-    list_display = ('codigo_sku', 'nombre', 'categoria', 'marca', 'precio', 'precio_oferta', 'costo_envio', 'stock', 'activo', 'destacado')
+    list_display = ('codigo_sku', 'nombre', 'categoria', 'marca', 'precio_costo', 'precio', 'precio_oferta', 'ganancia_unitaria', 'margen_ganancia', 'stock', 'activo', 'destacado')
     list_filter = ('activo', 'destacado', 'nuevo', 'permite_compra', 'categoria', 'marca')
     search_fields = ('nombre', 'codigo_sku', 'descripcion_corta')
     prepopulated_fields = {'slug': ('nombre',)}
@@ -43,7 +43,7 @@ class ImagenProductoAdmin(admin.ModelAdmin):
 class DetallePedidoInline(admin.TabularInline):
     model = DetallePedido
     extra = 0
-    readonly_fields = ('producto', 'nombre_producto_snapshot', 'codigo_sku_snapshot', 'precio_unitario', 'cantidad', 'subtotal', 'costo_envio_unitario', 'costo_envio_total')
+    readonly_fields = ('producto', 'nombre_producto_snapshot', 'codigo_sku_snapshot', 'precio_unitario', 'precio_costo_unitario', 'cantidad', 'subtotal', 'costo_envio_unitario', 'costo_envio_total')
 
 
 @admin.register(ClientePedido)
@@ -63,7 +63,7 @@ class PedidoAdmin(admin.ModelAdmin):
 
 @admin.register(DetallePedido)
 class DetallePedidoAdmin(admin.ModelAdmin):
-    list_display = ('pedido', 'nombre_producto_snapshot', 'cantidad', 'precio_unitario', 'subtotal', 'costo_envio_total')
+    list_display = ('pedido', 'nombre_producto_snapshot', 'cantidad', 'precio_unitario', 'precio_costo_unitario', 'subtotal', 'ganancia_total', 'costo_envio_total')
     search_fields = ('pedido__codigo_pedido', 'nombre_producto_snapshot', 'codigo_sku_snapshot')
 
 
@@ -79,3 +79,36 @@ class UbicacionTiendaAdmin(admin.ModelAdmin):
     list_display = ('nombre', 'departamento', 'municipio', 'telefono', 'activo', 'orden')
     list_filter = ('activo', 'departamento')
     search_fields = ('nombre', 'direccion', 'municipio', 'departamento')
+
+
+class DetalleVentaInline(admin.TabularInline):
+    model = DetalleVenta
+    extra = 0
+    readonly_fields = ('producto', 'cantidad', 'precio_unitario', 'precio_costo_unitario', 'subtotal', 'costo_total', 'ganancia_total')
+
+class PagoVentaInline(admin.TabularInline):
+    model = PagoVenta
+    extra = 0
+    readonly_fields = ('monto', 'metodo_pago', 'referencia', 'fecha', 'usuario', 'observaciones')
+
+@admin.register(Cliente)
+class ClienteAdmin(admin.ModelAdmin):
+    list_display = ('nombre', 'telefono', 'email', 'nit', 'dpi', 'fecha_creacion')
+    search_fields = ('nombre', 'telefono', 'email', 'nit', 'dpi')
+
+@admin.register(Venta)
+class VentaAdmin(admin.ModelAdmin):
+    list_display = ('id', 'cliente', 'origen', 'estado', 'total', 'total_pagado', 'saldo_pendiente', 'ganancia_total', 'fecha', 'usuario')
+    list_filter = ('estado', 'origen', 'fecha')
+    search_fields = ('cliente__nombre', 'cliente__telefono', 'cliente__nit')
+    inlines = [DetalleVentaInline, PagoVentaInline]
+
+@admin.register(DetalleVenta)
+class DetalleVentaAdmin(admin.ModelAdmin):
+    list_display = ('venta', 'producto', 'cantidad', 'precio_unitario', 'precio_costo_unitario', 'subtotal', 'ganancia_total')
+    search_fields = ('venta__id', 'producto__nombre', 'producto__codigo_sku')
+
+@admin.register(PagoVenta)
+class PagoVentaAdmin(admin.ModelAdmin):
+    list_display = ('venta', 'monto', 'metodo_pago', 'referencia', 'fecha', 'usuario')
+    list_filter = ('metodo_pago', 'fecha')
