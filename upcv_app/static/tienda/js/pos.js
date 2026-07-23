@@ -43,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('btnPagar').disabled = state.carrito.length === 0;
     $('btnTopPagar').disabled = state.carrito.length === 0;
     $('btnPendiente').disabled = state.carrito.length === 0;
+    $('btnGuardarCotizacion').disabled = state.carrito.length === 0;
   }
 
   function renderCarrito() {
@@ -169,6 +170,35 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  async function guardarComoCotizacion() {
+    if (!state.carrito.length) return mostrarAlerta('No hay productos para cotizar.');
+    const payload = {
+      cliente_id: state.cliente?.id || null,
+      items: state.carrito.map(i => ({ producto_id: i.id, cantidad: i.cantidad })),
+      descuento_tipo: $('descuentoTipo').value,
+      descuento_valor: $('descuentoValor').value || '0',
+      impuesto_porcentaje: $('impuestoPorcentaje').value || '0',
+      envio: $('envioValor').value || '0',
+      observaciones: $('observacionesPago') ? $('observacionesPago').value : ''
+    };
+    mostrarLoading(true);
+    try {
+      const res = await fetch(app.dataset.crearCotizacionUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf(), 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify(payload) });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch (error) { console.error('Respuesta no JSON:', text); throw new Error('El servidor no devolvió JSON válido.'); }
+      if (!res.ok || !data.ok) throw new Error(data.mensaje || 'No se pudo guardar la cotización.');
+      mostrarAlerta(data.mensaje || 'Cotización guardada correctamente.', 'success');
+      if (data.imprimir_url) window.open(data.imprimir_url, '_blank');
+      limpiarCarrito(false);
+    } catch (error) {
+      mostrarAlerta(error.message || 'No se pudo guardar la cotización.');
+    } finally {
+      mostrarLoading(false);
+    }
+  }
+
+
   function mostrarLoading(show) {
     $('posLoading').classList.toggle('show', show);
   }
@@ -208,6 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btnNuevaVenta').addEventListener('click', () => limpiarCarrito(true));
   $('btnMantener').addEventListener('click', () => mostrarAlerta('Venta mantenida en pantalla. Use guardar pendiente para conservarla en el sistema.', 'info'));
   $('btnPendiente').addEventListener('click', () => guardarVentaPOS('pendiente'));
+  $('btnGuardarCotizacion').addEventListener('click', guardarComoCotizacion);
   $('btnPagar').addEventListener('click', abrirModalPago);
   $('btnTopPagar').addEventListener('click', abrirModalPago);
   $('btnPagoCompleto').addEventListener('click', registrarPagoCompleto);
@@ -222,4 +253,5 @@ document.addEventListener('DOMContentLoaded', () => {
   window.registrarPagoCompleto = registrarPagoCompleto;
   window.registrarPagoParcial = registrarPagoParcial;
   window.guardarVentaPOS = guardarVentaPOS;
+  window.guardarComoCotizacion = guardarComoCotizacion;
 });
