@@ -6,7 +6,7 @@
   <div id="posLoading" class="pos-loading"><div class="spinner-border text-light" role="status"><span class="visually-hidden">Guardando...</span></div></div>
   <div class="pos-topbar">
     <div class="pos-pill">Cliente: <span id="clienteActualNombre">Cliente mostrador</span></div>
-    <div class="pos-pill">Tecnologías de Guatemala</div>
+
     <input id="posSearch" class="pos-search" placeholder="Escanear/buscar producto por nombre o código" autocomplete="off">
     <button class="btn btn-light pos-mobile-cart" type="button" onclick="document.getElementById('posCartPanel').scrollIntoView({behavior:'smooth'})">Carrito</button>
     <button id="btnNuevaVenta" class="btn btn-outline-primary" type="button">Nueva venta</button>
@@ -14,8 +14,8 @@
     <button id="btnFullscreen" class="btn btn-outline-secondary" type="button">Pantalla completa</button>
     <a class="btn btn-outline-primary" href="{{ cotizaciones_url }}">Cotizaciones</a>
     <a class="btn btn-outline-primary" href="{{ clientes_url }}">Clientes</a>
-    <a class="btn btn-outline-primary" href="{{ pagos_pendientes_url }}">Pagos pendientes</a>
-    <a class="btn btn-outline-dark" href="{{ dashboard_url }}">Volver al panel</a>
+    <a class="btn btn-outline-primary" href="{{ pagos_pendientes_url }}">Pagos</a>
+    <a class="btn btn-outline-dark" href="{{ dashboard_url }}">Volver</a>
   </div>
   <div class="pos-layout">
     <section class="pos-panel pos-cart-panel" id="posCartPanel">
