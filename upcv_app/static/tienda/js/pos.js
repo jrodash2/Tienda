@@ -163,7 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!res.ok || !data.ok) throw new Error(data.mensaje || 'No se pudo guardar la venta.');
       state.ultimaVentaUrl = data.comprobante_url;
       $('btnComprobante').href = data.comprobante_url;
-      $('btnComprobante').classList.remove('disabled');
+      $('btnComprobante').classList.remove('disabled', 'd-none');
       mostrarAlerta(data.mensaje, 'success');
       if (data.comprobante_url) window.open(data.comprobante_url, '_blank');
       if (tipoPago === 'parcial' && Number(data.saldo || 0) > 0) mostrarAlerta(`Pago parcial registrado. Saldo pendiente: ${money(data.saldo)}`, 'info');
