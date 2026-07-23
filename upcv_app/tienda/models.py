@@ -397,6 +397,10 @@ class Venta(models.Model):
     estado = models.CharField(max_length=30, choices=ESTADOS, default='pendiente')
     fecha = models.DateTimeField(auto_now_add=True)
     observaciones = models.TextField(blank=True, null=True)
+    descuento_tipo = models.CharField(max_length=20, choices=[('fijo', 'Fijo'), ('porcentaje', 'Porcentaje')], default='fijo')
+    descuento_valor = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    impuesto_porcentaje = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'))
+    envio = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
     usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='ventas_pos')
     stock_descontado = models.BooleanField(default=True)
 
@@ -408,8 +412,29 @@ class Venta(models.Model):
         return f'Venta #{self.pk or 0:06d}'
 
     @property
-    def total(self):
+    def subtotal(self):
         return sum((detalle.subtotal for detalle in self.detalles.all()), Decimal('0.00'))
+
+    @property
+    def descuento_total(self):
+        valor = self.descuento_valor or Decimal('0.00')
+        if valor <= 0:
+            return Decimal('0.00')
+        if self.descuento_tipo == 'porcentaje':
+            descuento = (self.subtotal * valor) / Decimal('100')
+        else:
+            descuento = valor
+        return min(descuento, self.subtotal)
+
+    @property
+    def impuesto_total(self):
+        porcentaje = self.impuesto_porcentaje or Decimal('0.00')
+        base = self.subtotal - self.descuento_total
+        return (base * porcentaje) / Decimal('100') if porcentaje > 0 else Decimal('0.00')
+
+    @property
+    def total(self):
+        return self.subtotal - self.descuento_total + self.impuesto_total + (self.envio or Decimal('0.00'))
 
     @property
     def costo_total(self):
