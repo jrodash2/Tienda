@@ -43,19 +43,28 @@ document.addEventListener('DOMContentLoaded', () => {
     $('btnPagar').disabled = state.carrito.length === 0;
     $('btnTopPagar').disabled = state.carrito.length === 0;
     $('btnPendiente').disabled = state.carrito.length === 0;
+    $('btnGuardarCotizacion').disabled = state.carrito.length === 0;
   }
 
   function renderCarrito() {
     if (!state.carrito.length) {
-      $('carritoItems').innerHTML = '<div class="pos-empty">No hay productos agregados</div>';
+      $('carritoItems').innerHTML = '<div class="pos-empty-cart">No hay productos agregados</div>';
       calcularTotales();
       return;
     }
     $('carritoItems').innerHTML = state.carrito.map(item => `
-      <div class="pos-cart-line">
-        <div><strong>${item.nombre}</strong><br><small>${item.codigo} · ${money(item.precio)} · Stock ${item.stock}</small><br><strong>${money(item.precio * item.cantidad)}</strong></div>
-        <div class="pos-qty"><button class="btn btn-sm btn-light" data-action="menos" data-id="${item.id}">-</button><input class="form-control form-control-sm" data-action="cantidad" data-id="${item.id}" type="number" min="1" max="${item.stock}" value="${item.cantidad}"><button class="btn btn-sm btn-light" data-action="mas" data-id="${item.id}">+</button></div>
-        <button class="btn btn-sm btn-outline-danger" data-action="quitar" data-id="${item.id}">×</button>
+      <div class="pos-cart-item">
+        <div>
+          <div class="pos-cart-item-name">${item.nombre}</div>
+          <div class="pos-cart-item-meta">${item.codigo || ''} · ${money(item.precio)} · Stock ${item.stock}</div>
+          <div class="pos-qty-controls">
+            <button type="button" class="pos-qty-btn" data-action="menos" data-id="${item.id}">-</button>
+            <input class="pos-qty-input" data-action="cantidad" data-id="${item.id}" type="number" min="1" max="${item.stock}" value="${item.cantidad}">
+            <button type="button" class="pos-qty-btn" data-action="mas" data-id="${item.id}">+</button>
+            <button type="button" class="pos-remove-btn" data-action="quitar" data-id="${item.id}">×</button>
+          </div>
+        </div>
+        <div class="pos-cart-item-total">${money(item.precio * item.cantidad)}</div>
       </div>`).join('');
     calcularTotales();
   }
@@ -154,7 +163,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!res.ok || !data.ok) throw new Error(data.mensaje || 'No se pudo guardar la venta.');
       state.ultimaVentaUrl = data.comprobante_url;
       $('btnComprobante').href = data.comprobante_url;
-      $('btnComprobante').classList.remove('disabled');
+      $('btnComprobante').classList.remove('disabled', 'd-none');
       mostrarAlerta(data.mensaje, 'success');
       if (data.comprobante_url) window.open(data.comprobante_url, '_blank');
       if (tipoPago === 'parcial' && Number(data.saldo || 0) > 0) mostrarAlerta(`Pago parcial registrado. Saldo pendiente: ${money(data.saldo)}`, 'info');
@@ -168,6 +177,35 @@ document.addEventListener('DOMContentLoaded', () => {
       mostrarLoading(false);
     }
   }
+
+  async function guardarComoCotizacion() {
+    if (!state.carrito.length) return mostrarAlerta('No hay productos para cotizar.');
+    const payload = {
+      cliente_id: state.cliente?.id || null,
+      items: state.carrito.map(i => ({ producto_id: i.id, cantidad: i.cantidad })),
+      descuento_tipo: $('descuentoTipo').value,
+      descuento_valor: $('descuentoValor').value || '0',
+      impuesto_porcentaje: $('impuestoPorcentaje').value || '0',
+      envio: $('envioValor').value || '0',
+      observaciones: $('observacionesPago') ? $('observacionesPago').value : ''
+    };
+    mostrarLoading(true);
+    try {
+      const res = await fetch(app.dataset.crearCotizacionUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf(), 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify(payload) });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch (error) { console.error('Respuesta no JSON:', text); throw new Error('El servidor no devolvió JSON válido.'); }
+      if (!res.ok || !data.ok) throw new Error(data.mensaje || 'No se pudo guardar la cotización.');
+      mostrarAlerta(data.mensaje || 'Cotización guardada correctamente.', 'success');
+      if (data.imprimir_url) window.open(data.imprimir_url, '_blank');
+      limpiarCarrito(false);
+    } catch (error) {
+      mostrarAlerta(error.message || 'No se pudo guardar la cotización.');
+    } finally {
+      mostrarLoading(false);
+    }
+  }
+
 
   function mostrarLoading(show) {
     $('posLoading').classList.toggle('show', show);
@@ -208,6 +246,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btnNuevaVenta').addEventListener('click', () => limpiarCarrito(true));
   $('btnMantener').addEventListener('click', () => mostrarAlerta('Venta mantenida en pantalla. Use guardar pendiente para conservarla en el sistema.', 'info'));
   $('btnPendiente').addEventListener('click', () => guardarVentaPOS('pendiente'));
+  $('btnGuardarCotizacion').addEventListener('click', guardarComoCotizacion);
   $('btnPagar').addEventListener('click', abrirModalPago);
   $('btnTopPagar').addEventListener('click', abrirModalPago);
   $('btnPagoCompleto').addEventListener('click', registrarPagoCompleto);
@@ -222,4 +261,5 @@ document.addEventListener('DOMContentLoaded', () => {
   window.registrarPagoCompleto = registrarPagoCompleto;
   window.registrarPagoParcial = registrarPagoParcial;
   window.guardarVentaPOS = guardarVentaPOS;
+  window.guardarComoCotizacion = guardarComoCotizacion;
 });

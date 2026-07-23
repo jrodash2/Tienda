@@ -1,16 +1,21 @@
 import json
+import logging
+import os
 from decimal import Decimal
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q, Sum
 from django.core.paginator import Paginator
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
+from almacen_app.models import Institucion
 from almacen_app.utils import grupo_requerido
 from .cart import add_to_cart as session_add, calcular_envio_items, cart_items, clear_cart, remove_from_cart as session_remove, update_cart as session_update
 from .forms import (
@@ -18,9 +23,12 @@ from .forms import (
     CuentaBancariaForm, MarcaProductoForm, ProductoForm, RechazarPagoForm, UbicacionTiendaForm, ClienteForm, PagoVentaForm,
 )
 from .utils import formato_quetzales
-from .models import CategoriaProducto, ClientePedido, CuentaBancaria, DetallePedido, ImagenProducto, MarcaProducto, Pedido, Producto, UbicacionTienda, Cliente, Venta, DetalleVenta
+from .models import CategoriaProducto, ClientePedido, CuentaBancaria, DetallePedido, ImagenProducto, MarcaProducto, Pedido, Producto, UbicacionTienda, Cliente, Venta, DetalleVenta, CotizacionPOS, DetalleCotizacionPOS
 from .services.pos_service import agregar_pago_venta, anular_venta, crear_venta_pos
 from .services.email_service import programar_correo_confirmacion_pedido, programar_correo_nuevo_pedido_admin
+from xhtml2pdf import pisa
+
+logger = logging.getLogger(__name__)
 
 ENVIO_DEFAULT = Decimal('0.00')
 
@@ -414,7 +422,13 @@ def admin_dashboard(request):
 @login_required
 @grupo_requerido('Administrador', 'Tienda')
 def admin_productos(request):
-    return render(request, 'tienda/admin/productos/lista.html', {'productos': Producto.objects.select_related('categoria', 'marca')})
+    productos = Producto.objects.select_related('categoria', 'marca')
+    if request.GET.get('sin_costo') == '1':
+        productos = productos.filter(precio_costo__lte=0)
+    return render(request, 'tienda/admin/productos/lista.html', {
+        'productos': productos,
+        'sin_costo': request.GET.get('sin_costo') == '1',
+    })
 
 
 @login_required
@@ -610,6 +624,10 @@ def pos(request):
         'crear_cliente_api_url': reverse('tienda:pos_api_clientes_crear'),
         'crear_venta_api_url': reverse('tienda:pos_api_ventas_crear'),
         'dashboard_url': reverse('tienda:admin_reportes'),
+        'crear_cotizacion_api_url': reverse('tienda:pos_crear_cotizacion_api'),
+        'cotizaciones_url': reverse('tienda:pos_cotizaciones_lista'),
+        'clientes_url': reverse('tienda:pos_clientes_lista'),
+        'pagos_pendientes_url': reverse('tienda:admin_pagos_pendientes'),
     })
 
 
@@ -704,14 +722,230 @@ def pos_api_ventas_crear(request):
     except (json.JSONDecodeError, ValidationError, ValueError) as exc:
         mensaje = '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc)
         return JsonResponse({'ok': False, 'mensaje': mensaje}, status=400)
-    return JsonResponse({'ok': True, 'venta_id': venta.id, 'estado': venta.estado, 'total': f'{venta.total:.2f}', 'pagado': f'{venta.total_pagado:.2f}', 'saldo': f'{venta.saldo_pendiente:.2f}', 'comprobante_url': reverse('tienda:pos_comprobante', kwargs={'pk': venta.pk}), 'mensaje': 'Venta registrada correctamente'})
+    return JsonResponse({'ok': True, 'venta_id': venta.id, 'estado': venta.estado, 'total': f'{venta.total:.2f}', 'pagado': f'{venta.total_pagado:.2f}', 'saldo': f'{venta.saldo_pendiente:.2f}', 'comprobante_url': reverse('tienda:pos_comprobante', kwargs={'venta_id': venta.pk}), 'mensaje': 'Venta registrada correctamente'})
 
 
 @login_required
 @grupo_requerido('Administrador', 'Tienda', 'Ventas')
-def pos_comprobante(request, pk):
-    venta = get_object_or_404(Venta.objects.select_related('cliente', 'usuario').prefetch_related('detalles__producto', 'pagos'), pk=pk)
-    return render(request, 'tienda/pos/comprobante.html', {'venta': venta, 'ultimo_pago': venta.pagos.first()})
+@require_POST
+def pos_crear_cotizacion_api(request):
+    try:
+        data = json.loads(request.body.decode('utf-8') or '{}')
+        items = data.get('items') or []
+        if not items:
+            return JsonResponse({'ok': False, 'mensaje': 'No hay productos para cotizar.'}, status=400)
+
+        descuento_tipo = data.get('descuento_tipo') or 'fijo'
+        if descuento_tipo not in ('fijo', 'porcentaje'):
+            return JsonResponse({'ok': False, 'mensaje': 'Tipo de descuento inválido.'}, status=400)
+        descuento_valor = Decimal(str(data.get('descuento_valor') or '0'))
+        impuesto_porcentaje = Decimal(str(data.get('impuesto_porcentaje') or '0'))
+        envio = Decimal(str(data.get('envio') or '0'))
+        if descuento_valor < 0 or impuesto_porcentaje < 0 or envio < 0:
+            return JsonResponse({'ok': False, 'mensaje': 'Descuento, impuesto y envío no pueden ser negativos.'}, status=400)
+
+        with transaction.atomic():
+            cliente = Cliente.objects.filter(pk=data.get('cliente_id')).first() if data.get('cliente_id') else None
+            cotizacion = CotizacionPOS.objects.create(
+                cliente=cliente,
+                usuario=request.user,
+                estado='borrador',
+                descuento_tipo=descuento_tipo,
+                descuento_valor=descuento_valor,
+                impuesto_porcentaje=impuesto_porcentaje,
+                envio=envio,
+                observaciones=data.get('observaciones') or '',
+            )
+            subtotal = Decimal('0.00')
+            for item in items:
+                producto_id = item.get('producto_id') or item.get('id')
+                cantidad = int(item.get('cantidad') or 0)
+                if cantidad <= 0:
+                    raise ValidationError('La cantidad debe ser mayor a cero.')
+                producto = get_object_or_404(Producto, pk=producto_id)
+                precio = producto.precio_actual
+                DetalleCotizacionPOS.objects.create(
+                    cotizacion=cotizacion,
+                    producto=producto,
+                    cantidad=cantidad,
+                    precio_unitario=precio,
+                    precio_costo_unitario=producto.precio_costo or Decimal('0.00'),
+                )
+                subtotal += precio * cantidad
+            if cotizacion.descuento_monto > subtotal:
+                raise ValidationError('El descuento no puede ser mayor al subtotal.')
+
+        return JsonResponse({
+            'ok': True,
+            'cotizacion_id': cotizacion.id,
+            'cotizacion_url': reverse('tienda:pos_cotizacion_detalle', args=[cotizacion.id]),
+            'imprimir_url': reverse('tienda:pos_cotizacion_comprobante', args=[cotizacion.id]),
+            'mensaje': 'Cotización guardada correctamente.',
+        })
+    except json.JSONDecodeError:
+        return JsonResponse({'ok': False, 'mensaje': 'JSON inválido.'}, status=400)
+    except (ValidationError, ValueError) as exc:
+        mensaje = '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc)
+        return JsonResponse({'ok': False, 'mensaje': mensaje}, status=400)
+    except Exception as exc:
+        logger.exception('Error creando cotización POS')
+        return JsonResponse({'ok': False, 'mensaje': f'Error al crear cotización: {exc}'}, status=500)
+
+
+def _cotizacion_queryset():
+    return CotizacionPOS.objects.select_related('cliente', 'usuario', 'venta_convertida').prefetch_related('detalles__producto')
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+def pos_clientes_lista(request):
+    clientes = Cliente.objects.all()
+    return render(request, 'tienda/pos/clientes_lista.html', {'clientes': clientes})
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+def pos_cotizaciones_lista(request):
+    cotizaciones = _cotizacion_queryset()
+    return render(request, 'tienda/pos/cotizaciones_lista.html', {'cotizaciones': cotizaciones})
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+def pos_cotizacion_detalle(request, cotizacion_id):
+    cotizacion = get_object_or_404(_cotizacion_queryset(), pk=cotizacion_id)
+    return render(request, 'tienda/pos/cotizacion_detalle.html', {'cotizacion': cotizacion})
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+def pos_cotizacion_comprobante(request, cotizacion_id):
+    cotizacion = get_object_or_404(_cotizacion_queryset(), pk=cotizacion_id)
+    return render(request, 'tienda/pos/cotizacion_comprobante.html', {'cotizacion': cotizacion, 'configuracion': _configuracion_comprobante()})
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+def pos_cotizacion_pdf(request, cotizacion_id):
+    cotizacion = get_object_or_404(_cotizacion_queryset(), pk=cotizacion_id)
+    html = render_to_string('tienda/pos/cotizacion_pdf.html', {'cotizacion': cotizacion, 'configuracion': _configuracion_comprobante()}, request=request)
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="cotizacion_{cotizacion.id}.pdf"'
+    pisa_status = pisa.CreatePDF(html, dest=response, encoding='UTF-8', link_callback=_pdf_link_callback)
+    if pisa_status.err:
+        return HttpResponse('Ocurrió un error al generar el PDF de la cotización.', status=500)
+    return response
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+@require_POST
+def pos_cotizacion_convertir_venta(request, cotizacion_id):
+    cotizacion = get_object_or_404(_cotizacion_queryset(), pk=cotizacion_id)
+    if cotizacion.estado == 'convertida':
+        messages.warning(request, 'Esta cotización ya fue convertida en venta.')
+        return redirect('tienda:pos_cotizacion_detalle', cotizacion_id=cotizacion.id)
+    if cotizacion.estado == 'anulada':
+        messages.error(request, 'No se puede convertir una cotización anulada.')
+        return redirect('tienda:pos_cotizacion_detalle', cotizacion_id=cotizacion.id)
+    try:
+        with transaction.atomic():
+            detalles = list(cotizacion.detalles.select_related('producto'))
+            for detalle in detalles:
+                producto = Producto.objects.select_for_update().get(pk=detalle.producto_id)
+                if producto.stock < detalle.cantidad:
+                    raise ValueError(f'Stock insuficiente para {producto.nombre}. Disponible: {producto.stock}')
+            venta = Venta.objects.create(
+                cliente=cotizacion.cliente,
+                origen='pos',
+                estado='pendiente',
+                usuario=request.user,
+                descuento_tipo=cotizacion.descuento_tipo,
+                descuento_valor=cotizacion.descuento_valor,
+                impuesto_porcentaje=cotizacion.impuesto_porcentaje,
+                envio=cotizacion.envio,
+                observaciones=f'Venta generada desde cotización #{cotizacion.id}. {cotizacion.observaciones or ""}'.strip(),
+            )
+            for detalle in detalles:
+                producto = Producto.objects.select_for_update().get(pk=detalle.producto_id)
+                DetalleVenta.objects.create(venta=venta, producto=producto, cantidad=detalle.cantidad, precio_unitario=detalle.precio_unitario, precio_costo_unitario=detalle.precio_costo_unitario)
+                producto.stock -= detalle.cantidad
+                producto.save(update_fields=['stock', 'fecha_actualizacion'])
+            cotizacion.estado = 'convertida'
+            cotizacion.venta_convertida = venta
+            cotizacion.save(update_fields=['estado', 'venta_convertida'])
+        messages.success(request, f'Cotización convertida correctamente en venta #{venta.id}.')
+        return redirect('tienda:pos_comprobante', venta_id=venta.id)
+    except Exception as exc:
+        messages.error(request, str(exc))
+        return redirect('tienda:pos_cotizacion_detalle', cotizacion_id=cotizacion.id)
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+@require_POST
+def pos_cotizacion_anular(request, cotizacion_id):
+    cotizacion = get_object_or_404(CotizacionPOS, pk=cotizacion_id)
+    if cotizacion.estado == 'convertida':
+        messages.error(request, 'No se puede anular una cotización convertida.')
+    else:
+        cotizacion.estado = 'anulada'
+        cotizacion.save(update_fields=['estado'])
+        messages.warning(request, 'Cotización anulada correctamente.')
+    return redirect('tienda:pos_cotizacion_detalle', cotizacion_id=cotizacion.id)
+
+
+def _configuracion_comprobante():
+    return Institucion.objects.order_by('id').first()
+
+
+def _venta_comprobante_queryset():
+    return Venta.objects.select_related('cliente', 'usuario').prefetch_related('detalles__producto', 'pagos')
+
+
+def _pdf_link_callback(uri, rel):
+    if uri.startswith(settings.MEDIA_URL):
+        path = os.path.join(settings.MEDIA_ROOT, uri.replace(settings.MEDIA_URL, '', 1))
+    elif uri.startswith(settings.STATIC_URL):
+        static_root = getattr(settings, 'STATIC_ROOT', '')
+        path = os.path.join(static_root, uri.replace(settings.STATIC_URL, '', 1)) if static_root else ''
+        if not path or not os.path.isfile(path):
+            for static_dir in getattr(settings, 'STATICFILES_DIRS', []):
+                candidate = os.path.join(static_dir, uri.replace(settings.STATIC_URL, '', 1))
+                if os.path.isfile(candidate):
+                    return candidate
+    else:
+        return uri
+
+    if not os.path.isfile(path):
+        raise Exception(f'No se encontró el archivo: {path}')
+    return path
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+def pos_comprobante(request, venta_id):
+    venta = get_object_or_404(_venta_comprobante_queryset(), pk=venta_id)
+    return render(request, 'tienda/pos/comprobante.html', {
+        'venta': venta,
+        'configuracion': _configuracion_comprobante(),
+    })
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+def pos_comprobante_pdf(request, venta_id):
+    venta = get_object_or_404(_venta_comprobante_queryset(), pk=venta_id)
+    html = render_to_string('tienda/pos/comprobante_pdf.html', {
+        'venta': venta,
+        'configuracion': _configuracion_comprobante(),
+    }, request=request)
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="comprobante_venta_{venta.id}.pdf"'
+    pisa_status = pisa.CreatePDF(html, dest=response, encoding='UTF-8', link_callback=_pdf_link_callback)
+    if pisa_status.err:
+        return HttpResponse('Ocurrió un error al generar el PDF del comprobante.', status=500)
+    return response
 
 
 @login_required
@@ -723,7 +957,7 @@ def agregar_pago_pos(request, pk):
         try:
             agregar_pago_venta(venta=venta, usuario=request.user, **form.cleaned_data)
             messages.success(request, 'Pago registrado correctamente.')
-            return redirect('tienda:pos_comprobante', pk=venta.pk)
+            return redirect('tienda:pos_comprobante', venta_id=venta.pk)
         except Exception as exc:
             messages.error(request, str(exc))
     return render(request, 'tienda/pos/agregar_pago.html', {'venta': venta, 'form': form})
@@ -757,25 +991,32 @@ def admin_reportes(request):
     if cliente_q:
         ventas = ventas.filter(Q(cliente__nombre__icontains=cliente_q) | Q(cliente__telefono__icontains=cliente_q) | Q(cliente__nit__icontains=cliente_q))
 
-    detalle_expr = ExpressionWrapper(F('precio_unitario') * F('cantidad'), output_field=DecimalField(max_digits=12, decimal_places=2))
-    costo_expr = ExpressionWrapper(F('precio_costo_unitario') * F('cantidad'), output_field=DecimalField(max_digits=12, decimal_places=2))
-    detalles = DetalleVenta.objects.filter(venta__in=ventas)
     ventas_lista = list(ventas.prefetch_related('detalles', 'pagos'))
     total_vendido = sum((venta.total for venta in ventas_lista), Decimal('0.00'))
-    costo_total = sum((venta.costo_total for venta in ventas_lista), Decimal('0.00'))
     total_pagado = sum((venta.total_pagado for venta in ventas_lista), Decimal('0.00'))
-    ventas_por_dia = list(detalles.values('venta__fecha__date').annotate(total=Sum(detalle_expr), costo=Sum(costo_expr)).order_by('venta__fecha__date'))
-    for dia in ventas_por_dia:
-        dia['ganancia'] = (dia['total'] or Decimal('0.00')) - (dia['costo'] or Decimal('0.00'))
+    costo_total = sum((venta.costo_total for venta in ventas_lista), Decimal('0.00'))
+    ganancia_bruta = sum((venta.ganancia_bruta for venta in ventas_lista), Decimal('0.00'))
+    ganancia_cobrada = sum((venta.ganancia_cobrada for venta in ventas_lista), Decimal('0.00'))
+    saldo_pendiente = sum((venta.saldo_pendiente for venta in ventas_lista), Decimal('0.00'))
+    ventas_por_dia = []
+    ventas_por_fecha = {}
+    for venta in ventas_lista:
+        fecha = venta.fecha.date()
+        resumen = ventas_por_fecha.setdefault(fecha, {'venta__fecha__date': fecha, 'total': Decimal('0.00'), 'costo': Decimal('0.00'), 'ganancia': Decimal('0.00')})
+        resumen['total'] += venta.total
+        resumen['costo'] += venta.costo_total
+        resumen['ganancia'] += venta.ganancia_bruta
+    ventas_por_dia = [ventas_por_fecha[fecha] for fecha in sorted(ventas_por_fecha)]
     return render(request, 'tienda/admin/reportes.html', {
         'ventas': ventas_lista,
         'total_vendido': total_vendido,
         'costo_total': costo_total,
-        'ganancia_total': total_vendido - costo_total,
+        'ganancia_bruta': ganancia_bruta,
+        'ganancia_cobrada': ganancia_cobrada,
         'cantidad_ventas': len(ventas_lista),
         'ticket_promedio': (total_vendido / len(ventas_lista)) if ventas_lista else Decimal('0.00'),
         'total_pagado': total_pagado,
-        'saldo_pendiente': total_vendido - total_pagado,
+        'saldo_pendiente': saldo_pendiente,
         'ventas_por_dia': ventas_por_dia,
         'estados': Venta.ESTADOS,
         'origenes': Venta.ORIGENES,

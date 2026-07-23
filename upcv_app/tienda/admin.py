@@ -112,3 +112,25 @@ class DetalleVentaAdmin(admin.ModelAdmin):
 class PagoVentaAdmin(admin.ModelAdmin):
     list_display = ('venta', 'monto', 'metodo_pago', 'referencia', 'fecha', 'usuario')
     list_filter = ('metodo_pago', 'fecha')
+
+from .models import CotizacionPOS, DetalleCotizacionPOS
+
+
+class DetalleCotizacionPOSInline(admin.TabularInline):
+    model = DetalleCotizacionPOS
+    extra = 0
+    readonly_fields = ('producto', 'cantidad', 'precio_unitario', 'precio_costo_unitario', 'subtotal', 'costo_total', 'ganancia_total')
+
+
+@admin.register(CotizacionPOS)
+class CotizacionPOSAdmin(admin.ModelAdmin):
+    list_display = ('id', 'cliente', 'estado', 'total', 'fecha', 'fecha_vencimiento', 'usuario', 'venta_convertida')
+    list_filter = ('estado', 'fecha')
+    search_fields = ('id', 'cliente__nombre', 'cliente__telefono', 'cliente__nit', 'usuario__username')
+    inlines = [DetalleCotizacionPOSInline]
+
+
+@admin.register(DetalleCotizacionPOS)
+class DetalleCotizacionPOSAdmin(admin.ModelAdmin):
+    list_display = ('cotizacion', 'producto', 'cantidad', 'precio_unitario', 'precio_costo_unitario', 'subtotal', 'ganancia_total')
+    search_fields = ('cotizacion__id', 'producto__nombre', 'producto__codigo_sku')
