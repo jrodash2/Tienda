@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from tienda.models import CategoriaProducto, Cliente, PagoVenta, Producto
+from tienda.models import CategoriaProducto, Cliente, CotizacionPOS, DetalleCotizacionPOS, PagoVenta, Producto
 from tienda.services.pos_service import crear_venta_pos
 
 
@@ -73,3 +73,21 @@ class VentaGananciasPOSTests(TestCase):
         self.assertEqual(venta.ganancia_bruta, Decimal('120.00'))
         self.assertTrue(venta.tiene_detalles_sin_costo)
         self.assertEqual(PagoVenta.objects.filter(venta=venta).count(), 1)
+
+
+    def test_cotizacion_no_descuenta_stock_y_convierte_una_sola_vez(self):
+        producto = self.crear_producto('80.00')
+        stock_inicial = producto.stock
+        cotizacion = CotizacionPOS.objects.create(cliente=self.cliente, usuario=self.usuario)
+        DetalleCotizacionPOS.objects.create(
+            cotizacion=cotizacion,
+            producto=producto,
+            cantidad=2,
+            precio_unitario=producto.precio_actual,
+            precio_costo_unitario=producto.precio_costo,
+        )
+
+        producto.refresh_from_db()
+        self.assertEqual(producto.stock, stock_inicial)
+        self.assertEqual(cotizacion.total, Decimal('240.00'))
+        self.assertEqual(cotizacion.nombre_vendedor, 'vendedor')

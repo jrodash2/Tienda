@@ -6,10 +6,10 @@
   <meta charset="UTF-8">
   <title>Comprobante de venta #{{ venta.id|stringformat:'06d' }}</title>
   <style>
-    @page { size: letter; margin: 1.2cm; }
-    body { font-family: Arial, Helvetica, sans-serif; color: #111827; font-size: 11px; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { border: 1px solid #d1d5db; padding: 6px; vertical-align: top; }
+    @page { size: letter; margin: 1cm; }
+    * { box-sizing: border-box; } html, body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; color: #111827; font-size: 11px; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th, td { border: 1px solid #d1d5db; padding: 5px; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }
     th { background: #f3f4f6; font-weight: bold; }
     .header-table td { border: none; padding: 0 0 10px 0; }
     .logo { width: 85px; height: 85px; object-fit: contain; }
@@ -46,7 +46,7 @@
         <p><strong>No.</strong> #{{ venta.id|stringformat:'06d' }}</p>
         <p><strong>Fecha:</strong> {{ venta.fecha|date:'d/m/Y H:i' }}</p>
         <p><strong>Estado:</strong> {{ venta.get_estado_display }}</p>
-        <p><strong>Vendedor:</strong> {{ venta.usuario|default:'No registrado' }}</p>
+        <p><strong>Vendedor:</strong> {{ venta.nombre_vendedor }}</p>
       </td>
     </tr>
   </table>

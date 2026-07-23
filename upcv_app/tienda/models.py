@@ -412,6 +412,15 @@ class Venta(models.Model):
         return f'Venta #{self.pk or 0:06d}'
 
     @property
+    def nombre_vendedor(self):
+        if self.usuario:
+            nombre = self.usuario.get_full_name()
+            if nombre:
+                return nombre
+            return self.usuario.username
+        return 'No registrado'
+
+    @property
     def subtotal_productos(self):
         return sum((detalle.subtotal for detalle in self.detalles.all()), Decimal('0.00'))
 
@@ -505,6 +514,94 @@ class DetalleVenta(models.Model):
     cantidad = models.PositiveIntegerField(default=1)
     precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
     precio_costo_unitario = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+
+    @property
+    def subtotal(self):
+        return (self.precio_unitario or Decimal('0.00')) * self.cantidad
+
+    @property
+    def costo_total(self):
+        return (self.precio_costo_unitario or Decimal('0.00')) * self.cantidad
+
+    @property
+    def ganancia_total(self):
+        return self.subtotal - self.costo_total
+
+
+class CotizacionPOS(models.Model):
+    ESTADOS = [
+        ('borrador', 'Borrador'),
+        ('enviada', 'Enviada'),
+        ('aprobada', 'Aprobada'),
+        ('convertida', 'Convertida en venta'),
+        ('vencida', 'Vencida'),
+        ('anulada', 'Anulada'),
+    ]
+    cliente = models.ForeignKey(Cliente, on_delete=models.SET_NULL, null=True, blank=True, related_name='cotizaciones_pos')
+    estado = models.CharField(max_length=30, choices=ESTADOS, default='borrador')
+    fecha = models.DateTimeField(auto_now_add=True)
+    fecha_vencimiento = models.DateField(null=True, blank=True)
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='cotizaciones_pos')
+    descuento_tipo = models.CharField(max_length=20, choices=[('fijo', 'Fijo'), ('porcentaje', 'Porcentaje')], default='fijo')
+    descuento_valor = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    impuesto_porcentaje = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'))
+    envio = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    observaciones = models.TextField(blank=True, null=True)
+    venta_convertida = models.OneToOneField(Venta, on_delete=models.SET_NULL, null=True, blank=True, related_name='cotizacion_origen')
+
+    class Meta:
+        ordering = ['-fecha']
+        verbose_name = 'cotización POS'
+        verbose_name_plural = 'cotizaciones POS'
+
+    def __str__(self):
+        return f'Cotización #{self.pk or 0:06d}'
+
+    @property
+    def nombre_vendedor(self):
+        if self.usuario:
+            nombre = self.usuario.get_full_name()
+            if nombre:
+                return nombre
+            return self.usuario.username
+        return 'No registrado'
+
+    @property
+    def subtotal_productos(self):
+        return sum((detalle.subtotal for detalle in self.detalles.all()), Decimal('0.00'))
+
+    @property
+    def descuento_monto(self):
+        subtotal = self.subtotal_productos
+        valor = self.descuento_valor or Decimal('0.00')
+        if self.descuento_tipo == 'porcentaje':
+            descuento = subtotal * valor / Decimal('100')
+        else:
+            descuento = valor
+        if descuento < 0:
+            return Decimal('0.00')
+        return min(descuento, subtotal)
+
+    @property
+    def impuesto_monto(self):
+        base = self.subtotal_productos - self.descuento_monto
+        porcentaje = self.impuesto_porcentaje or Decimal('0.00')
+        return base * porcentaje / Decimal('100')
+
+    @property
+    def total(self):
+        return self.subtotal_productos - self.descuento_monto + self.impuesto_monto + (self.envio or Decimal('0.00'))
+
+
+class DetalleCotizacionPOS(models.Model):
+    cotizacion = models.ForeignKey(CotizacionPOS, related_name='detalles', on_delete=models.CASCADE)
+    producto = models.ForeignKey(Producto, on_delete=models.PROTECT, related_name='detalles_cotizacion_pos')
+    cantidad = models.PositiveIntegerField(default=1)
+    precio_unitario = models.DecimalField(max_digits=10, decimal_places=2)
+    precio_costo_unitario = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+
+    class Meta:
+        ordering = ['id']
 
     @property
     def subtotal(self):

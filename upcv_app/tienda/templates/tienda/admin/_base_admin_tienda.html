@@ -1,3 +1,4 @@
+{% load static %}
 {% extends 'almacen/base.html' %}
 {% block content %}
 <div class="page-body">
@@ -9,6 +10,10 @@
         <a class="btn btn-sm btn-outline-primary" href="{% url 'tienda:admin_productos' %}">Productos</a>
         <a class="btn btn-sm btn-outline-primary" href="{% url 'tienda:admin_pedidos' %}">Pedidos</a>
         <a class="btn btn-sm btn-outline-success" href="{% url 'tienda:pos' %}">Punto de venta</a>
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'tienda:admin_reportes' %}">Ventas</a>
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'tienda:pos_cotizaciones_lista' %}">Cotizaciones</a>
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'tienda:pos_clientes_lista' %}">Clientes</a>
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'tienda:admin_pagos_pendientes' %}">Pagos pendientes</a>
         <a class="btn btn-sm btn-outline-primary" href="{% url 'tienda:admin_reportes' %}">Reporte de ganancias</a>
         <a class="btn btn-sm btn-outline-primary" href="{% url 'tienda:admin_ubicaciones_tienda' %}">Ubicaciones de tienda</a>
         <a class="btn btn-sm btn-outline-primary" href="{% url 'tienda:admin_cuentas_bancarias' %}">Cuentas bancarias</a>
@@ -16,6 +21,23 @@
     </div>
     {% if messages %}{% for message in messages %}<div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show">{{ message }}<button class="btn-close" data-bs-dismiss="alert"></button></div>{% endfor %}{% endif %}
     {% block tienda_admin_content %}{% endblock %}
+
+    <script>
+      window.addEventListener('load', function () {
+        function initTiendaDataTables() {
+          if (!window.jQuery || !jQuery.fn || !jQuery.fn.DataTable) return;
+          jQuery('.datatable, #tablaVentas, #tablaCotizaciones, #tablaClientes, #tablaPagosPendientes, #tablaReporteGanancias').each(function () {
+            if (jQuery.fn.DataTable.isDataTable(this)) { jQuery(this).DataTable().destroy(); }
+            jQuery(this).DataTable({ pageLength: 10, lengthMenu: [10, 25, 50, 100], responsive: true, autoWidth: false, order: [[0, 'desc']], language: { url: '//cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json' } });
+          });
+        }
+        if (window.jQuery && jQuery.fn && jQuery.fn.DataTable) { initTiendaDataTables(); return; }
+        var script = document.createElement('script');
+        script.src = "{% static 'assets/js/datatable/datatables/jquery.dataTables.min.js' %}";
+        script.onload = initTiendaDataTables;
+        document.body.appendChild(script);
+      });
+    </script>
   </div>
 </div>
 {% endblock %}
