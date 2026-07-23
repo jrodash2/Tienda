@@ -1,5 +1,5 @@
 from django import forms
-from .models import CategoriaProducto, MarcaProducto, Producto, ImagenProducto, Pedido, CuentaBancaria, UbicacionTienda
+from .models import CategoriaProducto, MarcaProducto, Producto, ImagenProducto, Pedido, CuentaBancaria, UbicacionTienda, Cliente, PagoVenta
 
 BOOTSTRAP_CLASS = 'form-control'
 
@@ -32,7 +32,7 @@ class ProductoForm(BootstrapModelForm):
         model = Producto
         fields = [
             'categoria', 'marca', 'nombre', 'slug', 'descripcion_corta', 'descripcion_larga',
-            'codigo_sku', 'precio', 'precio_oferta', 'stock', 'costo_envio', 'imagen_principal', 'activo',
+            'codigo_sku', 'precio_costo', 'precio', 'precio_oferta', 'stock', 'costo_envio', 'imagen_principal', 'activo',
             'destacado', 'nuevo', 'mostrar_en_catalogo', 'permite_compra',
         ]
         widgets = {'descripcion_larga': forms.Textarea(attrs={'rows': 6})}
@@ -133,3 +133,23 @@ class CambiarEstadoPedidoForm(BootstrapModelForm):
 class RechazarPagoForm(forms.Form):
     observaciones_admin = forms.CharField(label='Motivo del rechazo', widget=forms.Textarea(attrs={'rows': 3, 'class': BOOTSTRAP_CLASS}))
     rechazar_pedido = forms.BooleanField(required=False, label='Marcar pedido como rechazado', widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}))
+
+
+class ClienteForm(BootstrapModelForm):
+    class Meta:
+        model = Cliente
+        fields = ['nombre', 'telefono', 'email', 'nit', 'dpi', 'direccion']
+        widgets = {'direccion': forms.Textarea(attrs={'rows': 3})}
+
+
+class PagoVentaForm(BootstrapModelForm):
+    class Meta:
+        model = PagoVenta
+        fields = ['monto', 'metodo_pago', 'referencia', 'observaciones']
+        widgets = {'observaciones': forms.Textarea(attrs={'rows': 3})}
+
+    def clean_monto(self):
+        monto = self.cleaned_data['monto']
+        if monto <= 0:
+            raise forms.ValidationError('El pago debe ser mayor que cero.')
+        return monto
