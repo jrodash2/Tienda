@@ -23,7 +23,7 @@ def _validar_ajustes(*, subtotal, descuento_tipo, descuento_valor, impuesto_porc
         raise ValidationError('El descuento no puede ser mayor al subtotal.')
 
 
-def crear_venta_pos(*, usuario, cliente=None, items=None, monto_pagado=Decimal('0.00'), metodo_pago='efectivo', referencia='', observaciones='', descuento_tipo='fijo', descuento_valor=Decimal('0.00'), impuesto_porcentaje=Decimal('0.00'), envio=Decimal('0.00')):
+def crear_venta_pos(*, usuario, cliente=None, items=None, monto_pagado=Decimal('0.00'), metodo_pago='efectivo', referencia='', observaciones='', descuento_tipo='fijo', descuento_valor=Decimal('0.00'), impuesto_porcentaje=Decimal('0.00'), envio=Decimal('0.00'), tipo_pago='pendiente'):
     items = items or []
     if not items:
         raise ValidationError('Agregue al menos un producto a la venta.')
@@ -33,6 +33,10 @@ def crear_venta_pos(*, usuario, cliente=None, items=None, monto_pagado=Decimal('
     monto_pagado = _decimal(monto_pagado)
     if monto_pagado < 0:
         raise ValidationError('El pago no puede ser negativo.')
+    if tipo_pago not in ('completo', 'parcial', 'pendiente'):
+        raise ValidationError('Tipo de pago inválido.')
+    if tipo_pago == 'pendiente':
+        monto_pagado = Decimal('0.00')
 
     with transaction.atomic():
         venta = Venta.objects.create(
@@ -69,6 +73,10 @@ def crear_venta_pos(*, usuario, cliente=None, items=None, monto_pagado=Decimal('
         total = venta.total
         if monto_pagado > total:
             raise ValidationError('El pago no puede ser mayor al total de la venta.')
+        if tipo_pago == 'completo' and monto_pagado != total:
+            raise ValidationError('El pago completo debe cubrir el total exacto de la venta.')
+        if tipo_pago == 'parcial' and (monto_pagado <= 0 or monto_pagado >= total):
+            raise ValidationError('El pago parcial debe ser mayor que cero y menor al total.')
         if monto_pagado > 0:
             PagoVenta.objects.create(venta=venta, monto=monto_pagado, metodo_pago=metodo_pago, referencia=referencia, usuario=usuario, observaciones=observaciones)
         venta.actualizar_estado_pago()

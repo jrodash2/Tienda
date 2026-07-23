@@ -681,6 +681,12 @@ def pos_api_ventas_crear(request):
         data = json.loads(request.body.decode('utf-8') or '{}')
         cliente = Cliente.objects.filter(pk=data.get('cliente_id')).first() if data.get('cliente_id') else None
         pago = data.get('pago') or {}
+        tipo_pago = pago.get('tipo', 'pendiente')
+        monto_pago = Decimal(str(pago.get('monto', '0') or '0'))
+        if tipo_pago not in ('completo', 'parcial', 'pendiente'):
+            raise ValidationError('Tipo de pago inválido.')
+        if tipo_pago == 'pendiente':
+            monto_pago = Decimal('0.00')
         venta = crear_venta_pos(
             usuario=request.user,
             cliente=cliente,
@@ -689,15 +695,16 @@ def pos_api_ventas_crear(request):
             descuento_valor=data.get('descuento_valor', '0'),
             impuesto_porcentaje=data.get('impuesto_porcentaje', '0'),
             envio=data.get('envio', '0'),
-            monto_pagado=pago.get('monto', '0'),
+            monto_pagado=monto_pago,
             metodo_pago=pago.get('metodo_pago', 'efectivo'),
             referencia=pago.get('referencia', ''),
             observaciones=pago.get('observaciones', ''),
+            tipo_pago=tipo_pago,
         )
     except (json.JSONDecodeError, ValidationError, ValueError) as exc:
         mensaje = '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc)
         return JsonResponse({'ok': False, 'mensaje': mensaje}, status=400)
-    return JsonResponse({'ok': True, 'venta_id': venta.id, 'comprobante_url': reverse('tienda:pos_comprobante', kwargs={'pk': venta.pk}), 'mensaje': 'Venta registrada correctamente'})
+    return JsonResponse({'ok': True, 'venta_id': venta.id, 'estado': venta.estado, 'total': f'{venta.total:.2f}', 'pagado': f'{venta.total_pagado:.2f}', 'saldo': f'{venta.saldo_pendiente:.2f}', 'comprobante_url': reverse('tienda:pos_comprobante', kwargs={'pk': venta.pk}), 'mensaje': 'Venta registrada correctamente'})
 
 
 @login_required

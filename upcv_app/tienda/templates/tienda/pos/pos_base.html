@@ -1,0 +1,16 @@
+{% load static %}
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Punto de venta{% endblock %}</title>
+  <link href="{% static 'assets/css/bootstrap-5.3.0.min.css' %}" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'tienda/css/pos.css' %}">
+</head>
+<body class="pos-body">
+  {% block content %}{% endblock %}
+  <script src="{% static 'assets/js/bootstrap/bootstrap.bundle.min.js' %}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

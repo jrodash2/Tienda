@@ -1,4 +1,4 @@
-(() => {
+document.addEventListener('DOMContentLoaded', () => {
   const app = document.getElementById('posApp');
   if (!app) return;
   const state = { carrito: [], productos: [], cliente: null, categoria: '', marca: '', ultimaVentaUrl: '' };
@@ -36,12 +36,13 @@
     $('envioTotal').textContent = money(t.envio);
     $('totalVenta').textContent = money(t.total);
     $('modalTotal').textContent = money(t.total);
+    $('modalPagado').textContent = money(0);
+    $('modalSaldo').textContent = money(t.total);
     $('pagadoTotal').textContent = money(t.pagado);
     $('saldoTotal').textContent = money(t.saldo);
     $('btnPagar').disabled = state.carrito.length === 0;
+    $('btnTopPagar').disabled = state.carrito.length === 0;
     $('btnPendiente').disabled = state.carrito.length === 0;
-    const cambio = t.pagado > t.total ? t.pagado - t.total : 0;
-    $('cambioPago').textContent = cambio ? `Cambio: ${money(cambio)}` : '';
   }
 
   function renderCarrito() {
@@ -106,28 +107,76 @@
     const data = await res.json();
     if (!data.ok) return mostrarAlerta(data.mensaje || 'No se pudo crear el cliente.');
     seleccionarCliente(data.cliente);
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('clienteModal')).hide();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCliente')).hide();
     mostrarAlerta('Cliente creado y seleccionado.', 'success');
   }
 
-  async function guardarVenta(monto = 0, imprimir = false) {
+  function abrirModalPago() {
+    if (!state.carrito.length) {
+      mostrarAlerta('No hay productos en la venta actual');
+      return;
+    }
+    actualizarResumenPago();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalPago')).show();
+  }
+
+  function actualizarResumenPago() {
+    calcularTotales();
+    const t = totales();
+    $('modalTotal').textContent = money(t.total);
+    $('modalPagado').textContent = money(0);
+    $('modalSaldo').textContent = money(t.total);
+  }
+
+  function registrarPagoCompleto() {
+    const total = totales().total;
+    $('montoRecibido').value = total.toFixed(2);
+    guardarVentaPOS('completo');
+  }
+
+  function registrarPagoParcial() {
+    guardarVentaPOS('parcial');
+  }
+
+  async function guardarVentaPOS(tipoPago = 'pendiente') {
+    const monto = tipoPago === 'completo' ? totales().total : Number($('montoRecibido').value || 0);
     if (!state.carrito.length) return mostrarAlerta('La venta no debe guardarse si el carrito está vacío.');
     const t = totales();
+    if (tipoPago === 'parcial' && monto <= 0) return mostrarAlerta('Ingrese un monto válido para pago parcial');
+    if (tipoPago === 'completo' && t.total <= 0) return mostrarAlerta('No se pudo determinar el total de la venta');
     if (monto < 0) return mostrarAlerta('No se permiten pagos negativos.');
-    if (monto > t.total) return mostrarAlerta('El pago no puede ser mayor al total sin manejo de vuelto.');
-    const payload = { cliente_id: state.cliente?.id || null, items: state.carrito.map(i => ({ producto_id: i.id, cantidad: i.cantidad })), descuento_tipo: $('descuentoTipo').value, descuento_valor: $('descuentoValor').value || '0', impuesto_porcentaje: $('impuestoPorcentaje').value || '0', envio: $('envioValor').value || '0', pago: { monto, metodo_pago: $('metodoPago').value, referencia: $('referenciaPago').value, observaciones: $('observacionesPago').value } };
-    $('btnGuardarImprimir').disabled = true;
-    const res = await fetch(app.dataset.crearVentaUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() }, body: JSON.stringify(payload) });
-    const data = await res.json();
-    $('btnGuardarImprimir').disabled = false;
-    if (!data.ok) return mostrarAlerta(data.mensaje || 'No se pudo guardar la venta.');
-    state.ultimaVentaUrl = data.comprobante_url;
-    $('btnComprobante').href = data.comprobante_url;
-    $('btnComprobante').classList.remove('disabled');
-    mostrarAlerta(data.mensaje, 'success');
-    if (imprimir) window.open(data.comprobante_url, '_blank');
-    limpiarCarrito(false);
-    await cargarProductos();
+    if (monto > t.total) return mostrarAlerta('El monto no puede ser mayor al saldo pendiente');
+    const payload = { cliente_id: state.cliente?.id || null, items: state.carrito.map(i => ({ producto_id: i.id, cantidad: i.cantidad })), descuento_tipo: $('descuentoTipo').value, descuento_valor: $('descuentoValor').value || '0', impuesto_porcentaje: $('impuestoPorcentaje').value || '0', envio: $('envioValor').value || '0', pago: { tipo: tipoPago, monto, metodo_pago: $('metodoPago').value, referencia: $('referenciaPago').value, observaciones: $('observacionesPago').value } };
+    mostrarLoading(true);
+    try {
+      const res = await fetch(app.dataset.crearVentaUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() }, body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.mensaje || 'No se pudo guardar la venta.');
+      state.ultimaVentaUrl = data.comprobante_url;
+      $('btnComprobante').href = data.comprobante_url;
+      $('btnComprobante').classList.remove('disabled');
+      mostrarAlerta(data.mensaje, 'success');
+      if (data.comprobante_url) window.open(data.comprobante_url, '_blank');
+      if (tipoPago === 'parcial' && Number(data.saldo || 0) > 0) mostrarAlerta(`Pago parcial registrado. Saldo pendiente: ${money(data.saldo)}`, 'info');
+      limpiarCarrito(false);
+      limpiarFormularioPago();
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('modalPago')).hide();
+      await cargarProductos();
+    } catch (error) {
+      mostrarAlerta(error.message || 'Ocurrió un error al procesar el pago');
+    } finally {
+      mostrarLoading(false);
+    }
+  }
+
+  function mostrarLoading(show) {
+    $('posLoading').classList.toggle('show', show);
+  }
+
+  function limpiarFormularioPago() {
+    $('montoRecibido').value = 0;
+    $('referenciaPago').value = '';
+    $('observacionesPago').value = '';
   }
 
   function limpiarCarrito(confirmar = true) {
@@ -146,7 +195,7 @@
     const cartAction = e.target.dataset.action;
     if (cartAction) { const item = state.carrito.find(i => i.id === Number(e.target.dataset.id)); if (!item) return; if (cartAction === 'mas') agregarProducto(item); if (cartAction === 'menos') item.cantidad = Math.max(1, item.cantidad - 1); if (cartAction === 'quitar') state.carrito = state.carrito.filter(i => i.id !== item.id); renderCarrito(); }
     const clienteBtn = e.target.closest('[data-cliente]');
-    if (clienteBtn) { seleccionarCliente(JSON.parse(clienteBtn.dataset.cliente)); bootstrap.Modal.getOrCreateInstance(document.getElementById('clienteModal')).hide(); }
+    if (clienteBtn) { seleccionarCliente(JSON.parse(clienteBtn.dataset.cliente)); bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCliente')).hide(); }
   });
 
   $('carritoItems').addEventListener('input', (e) => { if (e.target.dataset.action === 'cantidad') { const item = state.carrito.find(i => i.id === Number(e.target.dataset.id)); item.cantidad = Math.min(item.stock, Math.max(1, Number(e.target.value || 1))); renderCarrito(); } });
@@ -158,15 +207,19 @@
   $('btnReiniciar').addEventListener('click', () => limpiarCarrito(true));
   $('btnNuevaVenta').addEventListener('click', () => limpiarCarrito(true));
   $('btnMantener').addEventListener('click', () => mostrarAlerta('Venta mantenida en pantalla. Use guardar pendiente para conservarla en el sistema.', 'info'));
-  $('btnPendiente').addEventListener('click', () => guardarVenta(0, false));
-  $('btnPagar').addEventListener('click', () => bootstrap.Modal.getOrCreateInstance(document.getElementById('pagoModal')).show());
-  $('btnPagoCompleto').addEventListener('click', () => { $('montoRecibido').value = totales().total.toFixed(2); calcularTotales(); });
-  $('btnPagoParcial').addEventListener('click', () => $('montoRecibido').focus());
-  $('btnGuardarImprimir').addEventListener('click', () => guardarVenta(Number($('montoRecibido').value || 0), true));
+  $('btnPendiente').addEventListener('click', () => guardarVentaPOS('pendiente'));
+  $('btnPagar').addEventListener('click', abrirModalPago);
+  $('btnTopPagar').addEventListener('click', abrirModalPago);
+  $('btnPagoCompleto').addEventListener('click', registrarPagoCompleto);
+  $('btnPagoParcial').addEventListener('click', registrarPagoParcial);
   $('btnFullscreen').addEventListener('click', () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen());
   document.addEventListener('keydown', e => { if (e.key === 'F2') { e.preventDefault(); $('posSearch').focus(); } if (e.key === 'F4') { e.preventDefault(); $('btnPagar').click(); } if (e.key === 'F8') { e.preventDefault(); limpiarCarrito(true); } });
 
   cargarProductos();
   buscarClientes();
   calcularTotales();
-})();
+  window.abrirModalPago = abrirModalPago;
+  window.registrarPagoCompleto = registrarPagoCompleto;
+  window.registrarPagoParcial = registrarPagoParcial;
+  window.guardarVentaPOS = guardarVentaPOS;
+});
