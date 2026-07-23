@@ -1,16 +1,20 @@
 import json
+import os
 from decimal import Decimal
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q, Sum
 from django.core.paginator import Paginator
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
+from almacen_app.models import Institucion
 from almacen_app.utils import grupo_requerido
 from .cart import add_to_cart as session_add, calcular_envio_items, cart_items, clear_cart, remove_from_cart as session_remove, update_cart as session_update
 from .forms import (
@@ -21,6 +25,7 @@ from .utils import formato_quetzales
 from .models import CategoriaProducto, ClientePedido, CuentaBancaria, DetallePedido, ImagenProducto, MarcaProducto, Pedido, Producto, UbicacionTienda, Cliente, Venta, DetalleVenta
 from .services.pos_service import agregar_pago_venta, anular_venta, crear_venta_pos
 from .services.email_service import programar_correo_confirmacion_pedido, programar_correo_nuevo_pedido_admin
+from xhtml2pdf import pisa
 
 ENVIO_DEFAULT = Decimal('0.00')
 
@@ -414,7 +419,13 @@ def admin_dashboard(request):
 @login_required
 @grupo_requerido('Administrador', 'Tienda')
 def admin_productos(request):
-    return render(request, 'tienda/admin/productos/lista.html', {'productos': Producto.objects.select_related('categoria', 'marca')})
+    productos = Producto.objects.select_related('categoria', 'marca')
+    if request.GET.get('sin_costo') == '1':
+        productos = productos.filter(precio_costo__lte=0)
+    return render(request, 'tienda/admin/productos/lista.html', {
+        'productos': productos,
+        'sin_costo': request.GET.get('sin_costo') == '1',
+    })
 
 
 @login_required
@@ -704,14 +715,60 @@ def pos_api_ventas_crear(request):
     except (json.JSONDecodeError, ValidationError, ValueError) as exc:
         mensaje = '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc)
         return JsonResponse({'ok': False, 'mensaje': mensaje}, status=400)
-    return JsonResponse({'ok': True, 'venta_id': venta.id, 'estado': venta.estado, 'total': f'{venta.total:.2f}', 'pagado': f'{venta.total_pagado:.2f}', 'saldo': f'{venta.saldo_pendiente:.2f}', 'comprobante_url': reverse('tienda:pos_comprobante', kwargs={'pk': venta.pk}), 'mensaje': 'Venta registrada correctamente'})
+    return JsonResponse({'ok': True, 'venta_id': venta.id, 'estado': venta.estado, 'total': f'{venta.total:.2f}', 'pagado': f'{venta.total_pagado:.2f}', 'saldo': f'{venta.saldo_pendiente:.2f}', 'comprobante_url': reverse('tienda:pos_comprobante', kwargs={'venta_id': venta.pk}), 'mensaje': 'Venta registrada correctamente'})
+
+
+def _configuracion_comprobante():
+    return Institucion.objects.order_by('id').first()
+
+
+def _venta_comprobante_queryset():
+    return Venta.objects.select_related('cliente', 'usuario').prefetch_related('detalles__producto', 'pagos')
+
+
+def _pdf_link_callback(uri, rel):
+    if uri.startswith(settings.MEDIA_URL):
+        path = os.path.join(settings.MEDIA_ROOT, uri.replace(settings.MEDIA_URL, '', 1))
+    elif uri.startswith(settings.STATIC_URL):
+        static_root = getattr(settings, 'STATIC_ROOT', '')
+        path = os.path.join(static_root, uri.replace(settings.STATIC_URL, '', 1)) if static_root else ''
+        if not path or not os.path.isfile(path):
+            for static_dir in getattr(settings, 'STATICFILES_DIRS', []):
+                candidate = os.path.join(static_dir, uri.replace(settings.STATIC_URL, '', 1))
+                if os.path.isfile(candidate):
+                    return candidate
+    else:
+        return uri
+
+    if not os.path.isfile(path):
+        raise Exception(f'No se encontró el archivo: {path}')
+    return path
 
 
 @login_required
 @grupo_requerido('Administrador', 'Tienda', 'Ventas')
-def pos_comprobante(request, pk):
-    venta = get_object_or_404(Venta.objects.select_related('cliente', 'usuario').prefetch_related('detalles__producto', 'pagos'), pk=pk)
-    return render(request, 'tienda/pos/comprobante.html', {'venta': venta, 'ultimo_pago': venta.pagos.first()})
+def pos_comprobante(request, venta_id):
+    venta = get_object_or_404(_venta_comprobante_queryset(), pk=venta_id)
+    return render(request, 'tienda/pos/comprobante.html', {
+        'venta': venta,
+        'configuracion': _configuracion_comprobante(),
+    })
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+def pos_comprobante_pdf(request, venta_id):
+    venta = get_object_or_404(_venta_comprobante_queryset(), pk=venta_id)
+    html = render_to_string('tienda/pos/comprobante_pdf.html', {
+        'venta': venta,
+        'configuracion': _configuracion_comprobante(),
+    }, request=request)
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="comprobante_venta_{venta.id}.pdf"'
+    pisa_status = pisa.CreatePDF(html, dest=response, encoding='UTF-8', link_callback=_pdf_link_callback)
+    if pisa_status.err:
+        return HttpResponse('Ocurrió un error al generar el PDF del comprobante.', status=500)
+    return response
 
 
 @login_required
@@ -723,7 +780,7 @@ def agregar_pago_pos(request, pk):
         try:
             agregar_pago_venta(venta=venta, usuario=request.user, **form.cleaned_data)
             messages.success(request, 'Pago registrado correctamente.')
-            return redirect('tienda:pos_comprobante', pk=venta.pk)
+            return redirect('tienda:pos_comprobante', venta_id=venta.pk)
         except Exception as exc:
             messages.error(request, str(exc))
     return render(request, 'tienda/pos/agregar_pago.html', {'venta': venta, 'form': form})
@@ -757,25 +814,32 @@ def admin_reportes(request):
     if cliente_q:
         ventas = ventas.filter(Q(cliente__nombre__icontains=cliente_q) | Q(cliente__telefono__icontains=cliente_q) | Q(cliente__nit__icontains=cliente_q))
 
-    detalle_expr = ExpressionWrapper(F('precio_unitario') * F('cantidad'), output_field=DecimalField(max_digits=12, decimal_places=2))
-    costo_expr = ExpressionWrapper(F('precio_costo_unitario') * F('cantidad'), output_field=DecimalField(max_digits=12, decimal_places=2))
-    detalles = DetalleVenta.objects.filter(venta__in=ventas)
     ventas_lista = list(ventas.prefetch_related('detalles', 'pagos'))
     total_vendido = sum((venta.total for venta in ventas_lista), Decimal('0.00'))
-    costo_total = sum((venta.costo_total for venta in ventas_lista), Decimal('0.00'))
     total_pagado = sum((venta.total_pagado for venta in ventas_lista), Decimal('0.00'))
-    ventas_por_dia = list(detalles.values('venta__fecha__date').annotate(total=Sum(detalle_expr), costo=Sum(costo_expr)).order_by('venta__fecha__date'))
-    for dia in ventas_por_dia:
-        dia['ganancia'] = (dia['total'] or Decimal('0.00')) - (dia['costo'] or Decimal('0.00'))
+    costo_total = sum((venta.costo_total for venta in ventas_lista), Decimal('0.00'))
+    ganancia_bruta = sum((venta.ganancia_bruta for venta in ventas_lista), Decimal('0.00'))
+    ganancia_cobrada = sum((venta.ganancia_cobrada for venta in ventas_lista), Decimal('0.00'))
+    saldo_pendiente = sum((venta.saldo_pendiente for venta in ventas_lista), Decimal('0.00'))
+    ventas_por_dia = []
+    ventas_por_fecha = {}
+    for venta in ventas_lista:
+        fecha = venta.fecha.date()
+        resumen = ventas_por_fecha.setdefault(fecha, {'venta__fecha__date': fecha, 'total': Decimal('0.00'), 'costo': Decimal('0.00'), 'ganancia': Decimal('0.00')})
+        resumen['total'] += venta.total
+        resumen['costo'] += venta.costo_total
+        resumen['ganancia'] += venta.ganancia_bruta
+    ventas_por_dia = [ventas_por_fecha[fecha] for fecha in sorted(ventas_por_fecha)]
     return render(request, 'tienda/admin/reportes.html', {
         'ventas': ventas_lista,
         'total_vendido': total_vendido,
         'costo_total': costo_total,
-        'ganancia_total': total_vendido - costo_total,
+        'ganancia_bruta': ganancia_bruta,
+        'ganancia_cobrada': ganancia_cobrada,
         'cantidad_ventas': len(ventas_lista),
         'ticket_promedio': (total_vendido / len(ventas_lista)) if ventas_lista else Decimal('0.00'),
         'total_pagado': total_pagado,
-        'saldo_pendiente': total_vendido - total_pagado,
+        'saldo_pendiente': saldo_pendiente,
         'ventas_por_dia': ventas_por_dia,
         'estados': Venta.ESTADOS,
         'origenes': Venta.ORIGENES,
