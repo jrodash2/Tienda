@@ -414,7 +414,13 @@ def admin_dashboard(request):
 @login_required
 @grupo_requerido('Administrador', 'Tienda')
 def admin_productos(request):
-    return render(request, 'tienda/admin/productos/lista.html', {'productos': Producto.objects.select_related('categoria', 'marca')})
+    productos = Producto.objects.select_related('categoria', 'marca')
+    if request.GET.get('sin_costo') == '1':
+        productos = productos.filter(precio_costo__lte=0)
+    return render(request, 'tienda/admin/productos/lista.html', {
+        'productos': productos,
+        'sin_costo': request.GET.get('sin_costo') == '1',
+    })
 
 
 @login_required
@@ -757,25 +763,32 @@ def admin_reportes(request):
     if cliente_q:
         ventas = ventas.filter(Q(cliente__nombre__icontains=cliente_q) | Q(cliente__telefono__icontains=cliente_q) | Q(cliente__nit__icontains=cliente_q))
 
-    detalle_expr = ExpressionWrapper(F('precio_unitario') * F('cantidad'), output_field=DecimalField(max_digits=12, decimal_places=2))
-    costo_expr = ExpressionWrapper(F('precio_costo_unitario') * F('cantidad'), output_field=DecimalField(max_digits=12, decimal_places=2))
-    detalles = DetalleVenta.objects.filter(venta__in=ventas)
     ventas_lista = list(ventas.prefetch_related('detalles', 'pagos'))
     total_vendido = sum((venta.total for venta in ventas_lista), Decimal('0.00'))
-    costo_total = sum((venta.costo_total for venta in ventas_lista), Decimal('0.00'))
     total_pagado = sum((venta.total_pagado for venta in ventas_lista), Decimal('0.00'))
-    ventas_por_dia = list(detalles.values('venta__fecha__date').annotate(total=Sum(detalle_expr), costo=Sum(costo_expr)).order_by('venta__fecha__date'))
-    for dia in ventas_por_dia:
-        dia['ganancia'] = (dia['total'] or Decimal('0.00')) - (dia['costo'] or Decimal('0.00'))
+    costo_total = sum((venta.costo_total for venta in ventas_lista), Decimal('0.00'))
+    ganancia_bruta = sum((venta.ganancia_bruta for venta in ventas_lista), Decimal('0.00'))
+    ganancia_cobrada = sum((venta.ganancia_cobrada for venta in ventas_lista), Decimal('0.00'))
+    saldo_pendiente = sum((venta.saldo_pendiente for venta in ventas_lista), Decimal('0.00'))
+    ventas_por_dia = []
+    ventas_por_fecha = {}
+    for venta in ventas_lista:
+        fecha = venta.fecha.date()
+        resumen = ventas_por_fecha.setdefault(fecha, {'venta__fecha__date': fecha, 'total': Decimal('0.00'), 'costo': Decimal('0.00'), 'ganancia': Decimal('0.00')})
+        resumen['total'] += venta.total
+        resumen['costo'] += venta.costo_total
+        resumen['ganancia'] += venta.ganancia_bruta
+    ventas_por_dia = [ventas_por_fecha[fecha] for fecha in sorted(ventas_por_fecha)]
     return render(request, 'tienda/admin/reportes.html', {
         'ventas': ventas_lista,
         'total_vendido': total_vendido,
         'costo_total': costo_total,
-        'ganancia_total': total_vendido - costo_total,
+        'ganancia_bruta': ganancia_bruta,
+        'ganancia_cobrada': ganancia_cobrada,
         'cantidad_ventas': len(ventas_lista),
         'ticket_promedio': (total_vendido / len(ventas_lista)) if ventas_lista else Decimal('0.00'),
         'total_pagado': total_pagado,
-        'saldo_pendiente': total_vendido - total_pagado,
+        'saldo_pendiente': saldo_pendiente,
         'ventas_por_dia': ventas_por_dia,
         'estados': Venta.ESTADOS,
         'origenes': Venta.ORIGENES,
