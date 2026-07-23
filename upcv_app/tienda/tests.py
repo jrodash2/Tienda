@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from tienda.models import CategoriaProducto, Cliente, CotizacionPOS, DetalleCotizacionPOS, PagoVenta, Producto
 from tienda.services.pos_service import crear_venta_pos
@@ -91,3 +91,12 @@ class VentaGananciasPOSTests(TestCase):
         self.assertEqual(producto.stock, stock_inicial)
         self.assertEqual(cotizacion.total, Decimal('240.00'))
         self.assertEqual(cotizacion.nombre_vendedor, 'vendedor')
+
+
+class TemplateOrderingTests(SimpleTestCase):
+    def test_base_admin_tienda_extends_is_first_template_tag(self):
+        from pathlib import Path
+
+        template_path = Path(__file__).resolve().parent / 'templates' / 'tienda' / 'admin' / '_base_admin_tienda.html'
+        first_line = template_path.read_text(encoding='utf-8').splitlines()[0]
+        self.assertEqual(first_line, "{% extends 'almacen/base.html' %}")
