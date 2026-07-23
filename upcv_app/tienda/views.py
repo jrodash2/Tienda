@@ -1,16 +1,20 @@
 import json
+import os
 from decimal import Decimal
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q, Sum
 from django.core.paginator import Paginator
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
+from almacen_app.models import Institucion
 from almacen_app.utils import grupo_requerido
 from .cart import add_to_cart as session_add, calcular_envio_items, cart_items, clear_cart, remove_from_cart as session_remove, update_cart as session_update
 from .forms import (
@@ -21,6 +25,7 @@ from .utils import formato_quetzales
 from .models import CategoriaProducto, ClientePedido, CuentaBancaria, DetallePedido, ImagenProducto, MarcaProducto, Pedido, Producto, UbicacionTienda, Cliente, Venta, DetalleVenta
 from .services.pos_service import agregar_pago_venta, anular_venta, crear_venta_pos
 from .services.email_service import programar_correo_confirmacion_pedido, programar_correo_nuevo_pedido_admin
+from xhtml2pdf import pisa
 
 ENVIO_DEFAULT = Decimal('0.00')
 
@@ -710,14 +715,60 @@ def pos_api_ventas_crear(request):
     except (json.JSONDecodeError, ValidationError, ValueError) as exc:
         mensaje = '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc)
         return JsonResponse({'ok': False, 'mensaje': mensaje}, status=400)
-    return JsonResponse({'ok': True, 'venta_id': venta.id, 'estado': venta.estado, 'total': f'{venta.total:.2f}', 'pagado': f'{venta.total_pagado:.2f}', 'saldo': f'{venta.saldo_pendiente:.2f}', 'comprobante_url': reverse('tienda:pos_comprobante', kwargs={'pk': venta.pk}), 'mensaje': 'Venta registrada correctamente'})
+    return JsonResponse({'ok': True, 'venta_id': venta.id, 'estado': venta.estado, 'total': f'{venta.total:.2f}', 'pagado': f'{venta.total_pagado:.2f}', 'saldo': f'{venta.saldo_pendiente:.2f}', 'comprobante_url': reverse('tienda:pos_comprobante', kwargs={'venta_id': venta.pk}), 'mensaje': 'Venta registrada correctamente'})
+
+
+def _configuracion_comprobante():
+    return Institucion.objects.order_by('id').first()
+
+
+def _venta_comprobante_queryset():
+    return Venta.objects.select_related('cliente', 'usuario').prefetch_related('detalles__producto', 'pagos')
+
+
+def _pdf_link_callback(uri, rel):
+    if uri.startswith(settings.MEDIA_URL):
+        path = os.path.join(settings.MEDIA_ROOT, uri.replace(settings.MEDIA_URL, '', 1))
+    elif uri.startswith(settings.STATIC_URL):
+        static_root = getattr(settings, 'STATIC_ROOT', '')
+        path = os.path.join(static_root, uri.replace(settings.STATIC_URL, '', 1)) if static_root else ''
+        if not path or not os.path.isfile(path):
+            for static_dir in getattr(settings, 'STATICFILES_DIRS', []):
+                candidate = os.path.join(static_dir, uri.replace(settings.STATIC_URL, '', 1))
+                if os.path.isfile(candidate):
+                    return candidate
+    else:
+        return uri
+
+    if not os.path.isfile(path):
+        raise Exception(f'No se encontró el archivo: {path}')
+    return path
 
 
 @login_required
 @grupo_requerido('Administrador', 'Tienda', 'Ventas')
-def pos_comprobante(request, pk):
-    venta = get_object_or_404(Venta.objects.select_related('cliente', 'usuario').prefetch_related('detalles__producto', 'pagos'), pk=pk)
-    return render(request, 'tienda/pos/comprobante.html', {'venta': venta, 'ultimo_pago': venta.pagos.first()})
+def pos_comprobante(request, venta_id):
+    venta = get_object_or_404(_venta_comprobante_queryset(), pk=venta_id)
+    return render(request, 'tienda/pos/comprobante.html', {
+        'venta': venta,
+        'configuracion': _configuracion_comprobante(),
+    })
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+def pos_comprobante_pdf(request, venta_id):
+    venta = get_object_or_404(_venta_comprobante_queryset(), pk=venta_id)
+    html = render_to_string('tienda/pos/comprobante_pdf.html', {
+        'venta': venta,
+        'configuracion': _configuracion_comprobante(),
+    }, request=request)
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="comprobante_venta_{venta.id}.pdf"'
+    pisa_status = pisa.CreatePDF(html, dest=response, encoding='UTF-8', link_callback=_pdf_link_callback)
+    if pisa_status.err:
+        return HttpResponse('Ocurrió un error al generar el PDF del comprobante.', status=500)
+    return response
 
 
 @login_required
@@ -729,7 +780,7 @@ def agregar_pago_pos(request, pk):
         try:
             agregar_pago_venta(venta=venta, usuario=request.user, **form.cleaned_data)
             messages.success(request, 'Pago registrado correctamente.')
-            return redirect('tienda:pos_comprobante', pk=venta.pk)
+            return redirect('tienda:pos_comprobante', venta_id=venta.pk)
         except Exception as exc:
             messages.error(request, str(exc))
     return render(request, 'tienda/pos/agregar_pago.html', {'venta': venta, 'form': form})

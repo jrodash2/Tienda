@@ -1,3 +1,132 @@
-{% extends 'tienda/admin/_base_admin_tienda.html' %}{% load moneda_filters %}
-{% block tienda_admin_content %}<style>@media print{.no-print{display:none!important}body{background:white}.comprobante{box-shadow:none;border:none}}</style>
-<div class="comprobante card mx-auto" style="max-width:760px"><div class="card-body"><div class="text-center"><h3>Tecnologías de Guatemala</h3><h5>Comprobante de pago</h5></div><p><strong>Venta #{{ venta.id|stringformat:'06d' }}</strong><br>Fecha: {{ venta.fecha }}<br>Cliente: {{ venta.cliente|default:'Consumidor final' }}<br>Teléfono: {{ venta.cliente.telefono|default:'-' }}<br>Usuario/Vendedor: {{ venta.usuario|default:'-' }}<br>Estado: {{ venta.get_estado_display }}</p><table class="table"><thead><tr><th>Producto</th><th>Cantidad</th><th>Precio</th><th>Subtotal</th></tr></thead><tbody>{% for d in venta.detalles.all %}<tr><td>{{ d.producto.nombre }}</td><td>{{ d.cantidad }}</td><td>{{ d.precio_unitario|quetzales }}</td><td>{{ d.subtotal|quetzales }}</td></tr>{% endfor %}</tbody></table><h5>Total: {{ venta.total|quetzales }}</h5><p>Pagado: {{ venta.total_pagado|quetzales }}<br>Saldo pendiente: {{ venta.saldo_pendiente|quetzales }}<br>Estado: {{ venta.get_estado_display }}<br>{% if ultimo_pago %}Último método de pago: {{ ultimo_pago.get_metodo_pago_display }}<br>Referencia: {{ ultimo_pago.referencia|default:'-' }}{% endif %}</p><h6>Pagos registrados</h6><table class="table table-sm"><thead><tr><th>Fecha</th><th>Método</th><th>Referencia</th><th>Monto</th></tr></thead><tbody>{% for pago in venta.pagos.all %}<tr><td>{{ pago.fecha|date:'Y-m-d H:i' }}</td><td>{{ pago.get_metodo_pago_display }}</td><td>{{ pago.referencia|default:'-' }}</td><td>{{ pago.monto|quetzales }}</td></tr>{% empty %}<tr><td colspan="4" class="text-muted">Sin pagos registrados.</td></tr>{% endfor %}</tbody></table><p class="text-center">Gracias por su compra.</p><div class="no-print d-flex gap-2"><button class="btn btn-primary" onclick="window.print()">Imprimir comprobante</button><a class="btn btn-outline-primary" href="{% url 'tienda:pos_agregar_pago' venta.id %}">Agregar pago</a></div></div></div>{% endblock %}
+{% load static %}
+{% load moneda_filters %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Comprobante de venta #{{ venta.id|stringformat:'06d' }}</title>
+  <style>
+    @page { size: letter; margin: 1.2cm; }
+    body { font-family: Arial, Helvetica, sans-serif; background: #f3f4f6; color: #111827; margin: 0; padding: 20px; }
+    .actions { width: 8.5in; max-width: 100%; margin: 0 auto 15px; display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+    .btn { border: none; padding: 10px 16px; border-radius: 8px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-block; font-size: 14px; }
+    .btn-print { background: #2563eb; color: #fff; }
+    .btn-pdf { background: #16a34a; color: #fff; }
+    .btn-back { background: #374151; color: #fff; }
+    .invoice-page { width: 8.5in; min-height: 11in; background: #fff; margin: 0 auto; padding: 32px; box-shadow: 0 10px 30px rgba(0,0,0,.10); box-sizing: border-box; }
+    .invoice-header { display: flex; justify-content: space-between; gap: 20px; border-bottom: 2px solid #111827; padding-bottom: 18px; margin-bottom: 20px; }
+    .brand { display: flex; gap: 15px; align-items: flex-start; max-width: 60%; }
+    .brand-logo { width: 95px; height: 95px; object-fit: contain; }
+    .brand h1 { margin: 0; font-size: 22px; color: #111827; }
+    .brand p { margin: 3px 0; font-size: 12px; color: #374151; line-height: 1.35; }
+    .invoice-title { text-align: right; min-width: 230px; }
+    .invoice-title h2 { margin: 0; font-size: 24px; color: #111827; text-transform: uppercase; }
+    .invoice-title p { margin: 5px 0; font-size: 13px; }
+    .section-title { font-size: 14px; font-weight: 800; background: #111827; color: #fff; padding: 8px 10px; margin-top: 18px; margin-bottom: 0; text-transform: uppercase; letter-spacing: .03em; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid #e5e7eb; border-top: none; padding: 12px; gap: 7px 20px; font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #f3f4f6; color: #111827; padding: 9px; border: 1px solid #e5e7eb; text-align: left; }
+    td { padding: 9px; border: 1px solid #e5e7eb; vertical-align: top; }
+    .text-right { text-align: right; }
+    .summary-wrapper { display: flex; justify-content: flex-end; margin-top: 15px; }
+    .summary-table { width: 330px; }
+    .summary-table td { padding: 7px 9px; }
+    .summary-total td { font-size: 18px; font-weight: 800; background: #f9fafb; }
+    .balance-due td { font-weight: 800; color: #b91c1c; }
+    .status-badge { display: inline-block; padding: 5px 10px; border-radius: 999px; font-size: 12px; font-weight: 800; background: #dbeafe; color: #1d4ed8; }
+    .observations { border: 1px solid #e5e7eb; border-top: none; padding: 12px; font-size: 13px; min-height: 45px; }
+    .footer { margin-top: 25px; border-top: 1px solid #e5e7eb; padding-top: 12px; font-size: 12px; color: #4b5563; text-align: center; }
+    @media print { body { background: #fff; padding: 0; } .no-print { display: none !important; } .invoice-page { width: 100%; min-height: auto; box-shadow: none; margin: 0; padding: 0; } }
+  </style>
+</head>
+<body>
+<div class="actions no-print">
+  <button onclick="window.print()" class="btn btn-print">Imprimir</button>
+  <a href="{% url 'tienda:pos_comprobante_pdf' venta.id %}" class="btn btn-pdf">Descargar PDF</a>
+  <a href="{% url 'tienda:pos' %}" class="btn btn-back">Volver al POS</a>
+</div>
+
+<div class="invoice-page">
+  <div class="invoice-header">
+    <div class="brand">
+      {% if configuracion.logo %}
+        <img src="{{ configuracion.logo.url }}" class="brand-logo" alt="Logo">
+      {% else %}
+        <img src="{% static 'tienda/images/e-shop.png' %}" class="brand-logo" alt="Logo">
+      {% endif %}
+      <div>
+        <h1>{{ configuracion.nombre|default:'Tecnologías de Guatemala' }}</h1>
+        <p>{{ configuracion.slogan|default:'Soluciones y servicios a tu alcance' }}</p>
+        <p><strong>Dirección:</strong> {{ configuracion.direccion|default:'No registrada' }}</p>
+        <p><strong>Tel:</strong> {{ configuracion.telefono|default:'42167103' }}</p>
+        <p><strong>Correo:</strong> {{ configuracion.correo|default:'No registrado' }}</p>
+        <p><strong>Sitio web:</strong> {{ configuracion.pagina_web|default:'No registrado' }}</p>
+        <p><strong>NIT:</strong> {{ configuracion.nit|default:'No registrado' }}</p>
+      </div>
+    </div>
+    <div class="invoice-title">
+      <h2>Comprobante de venta</h2>
+      <p><strong>No.</strong> #{{ venta.id|stringformat:'06d' }}</p>
+      <p><strong>Fecha:</strong> {{ venta.fecha|date:'d/m/Y H:i' }}</p>
+      <p><strong>Estado:</strong> <span class="status-badge">{{ venta.get_estado_display }}</span></p>
+      <p><strong>Vendedor:</strong> {{ venta.usuario|default:'No registrado' }}</p>
+    </div>
+  </div>
+
+  <div class="section-title">Datos del cliente</div>
+  <div class="info-grid">
+    <div><strong>Cliente:</strong> {{ venta.cliente.nombre|default:'Consumidor final' }}</div>
+    <div><strong>Teléfono:</strong> {{ venta.cliente.telefono|default:'No registrado' }}</div>
+    <div><strong>Correo:</strong> {{ venta.cliente.email|default:'No registrado' }}</div>
+    <div><strong>NIT:</strong> {{ venta.cliente.nit|default:'CF' }}</div>
+    <div><strong>DPI:</strong> {{ venta.cliente.dpi|default:'No registrado' }}</div>
+    <div><strong>Dirección:</strong> {{ venta.cliente.direccion|default:'No registrada' }}</div>
+  </div>
+
+  <div class="section-title">Detalle de productos</div>
+  <table>
+    <thead><tr><th style="width: 60px;">Cant.</th><th>Descripción</th><th style="width: 130px;" class="text-right">Precio unitario</th><th style="width: 130px;" class="text-right">Subtotal</th></tr></thead>
+    <tbody>
+      {% for detalle in venta.detalles.all %}
+      <tr><td>{{ detalle.cantidad }}</td><td><strong>{{ detalle.producto.nombre }}</strong><br><small>Código: {{ detalle.producto.codigo_sku|default:'-' }}</small></td><td class="text-right">{{ detalle.precio_unitario|quetzales }}</td><td class="text-right">{{ detalle.subtotal|quetzales }}</td></tr>
+      {% empty %}
+      <tr><td colspan="4">No hay productos registrados.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="summary-wrapper">
+    <table class="summary-table">
+      <tr><td>Subtotal</td><td class="text-right">{{ venta.subtotal_productos|quetzales }}</td></tr>
+      <tr><td>Descuento</td><td class="text-right">{{ venta.descuento_monto|quetzales }}</td></tr>
+      <tr><td>Impuesto</td><td class="text-right">{{ venta.impuesto_monto|quetzales }}</td></tr>
+      <tr><td>Envío</td><td class="text-right">{{ venta.envio|quetzales }}</td></tr>
+      <tr class="summary-total"><td>Total</td><td class="text-right">{{ venta.total|quetzales }}</td></tr>
+      <tr><td>Pagado</td><td class="text-right">{{ venta.total_pagado|quetzales }}</td></tr>
+      <tr class="balance-due"><td>Saldo pendiente</td><td class="text-right">{{ venta.saldo_pendiente|quetzales }}</td></tr>
+    </table>
+  </div>
+
+  <div class="section-title">Pagos registrados</div>
+  <table>
+    <thead><tr><th>Fecha</th><th>Método</th><th>Referencia</th><th class="text-right">Monto</th></tr></thead>
+    <tbody>
+      {% for pago in venta.pagos.all %}
+      <tr><td>{{ pago.fecha|date:'d/m/Y H:i' }}</td><td>{{ pago.get_metodo_pago_display }}</td><td>{{ pago.referencia|default:'-' }}</td><td class="text-right">{{ pago.monto|quetzales }}</td></tr>
+      {% empty %}
+      <tr><td colspan="4">No hay pagos registrados.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="section-title">Observaciones</div>
+  <div class="observations">{{ venta.observaciones|default:'Gracias por su compra.' }}</div>
+
+  <div class="footer">
+    <p><strong>Gracias por su compra.</strong></p>
+    <p>Este documento es un comprobante interno de venta generado por el sistema POS.</p>
+  </div>
+</div>
+</body>
+</html>
