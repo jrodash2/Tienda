@@ -1,19 +1,25 @@
+import json
 from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, DecimalField, ExpressionWrapper, F, Q, Sum
 from django.core.paginator import Paginator
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from almacen_app.utils import grupo_requerido
 from .cart import add_to_cart as session_add, calcular_envio_items, cart_items, clear_cart, remove_from_cart as session_remove, update_cart as session_update
 from .forms import (
     CambiarEstadoPedidoForm, CategoriaProductoForm, CheckoutForm, ComprobanteTransferenciaForm,
-    CuentaBancariaForm, MarcaProductoForm, ProductoForm, RechazarPagoForm, UbicacionTiendaForm,
+    CuentaBancariaForm, MarcaProductoForm, ProductoForm, RechazarPagoForm, UbicacionTiendaForm, ClienteForm, PagoVentaForm,
 )
-from .models import CategoriaProducto, ClientePedido, CuentaBancaria, DetallePedido, ImagenProducto, MarcaProducto, Pedido, Producto, UbicacionTienda
+from .utils import formato_quetzales
+from .models import CategoriaProducto, ClientePedido, CuentaBancaria, DetallePedido, ImagenProducto, MarcaProducto, Pedido, Producto, UbicacionTienda, Cliente, Venta, DetalleVenta
+from .services.pos_service import agregar_pago_venta, anular_venta, crear_venta_pos
 from .services.email_service import programar_correo_confirmacion_pedido, programar_correo_nuevo_pedido_admin
 
 ENVIO_DEFAULT = Decimal('0.00')
@@ -280,6 +286,7 @@ def checkout(request):
                         subtotal=subtotal_linea,
                         costo_envio_unitario=envio_unitario,
                         costo_envio_total=envio_linea,
+                        precio_costo_unitario=producto.precio_costo or Decimal('0.00'),
                     )
                     producto.stock -= cantidad
                     producto.save(update_fields=['stock', 'fecha_actualizacion'])
@@ -582,21 +589,187 @@ def admin_cuenta_form(request, pk=None):
     return _crud_list_form(request, CuentaBancaria, CuentaBancariaForm, 'tienda/admin/cuentas/lista.html', 'tienda/admin/cuentas/form.html', 'tienda:admin_cuentas', pk)
 
 
+def _parse_pos_items(post):
+    items = []
+    for producto_id in post.getlist('producto_id'):
+        cantidad = post.get(f'cantidad_{producto_id}', '1')
+        items.append({'producto_id': producto_id, 'cantidad': cantidad})
+    return items
+
+
 @login_required
 @grupo_requerido('Administrador', 'Tienda', 'Ventas')
+def pos(request):
+    return render(request, 'tienda/pos/pos.html', {
+        'categorias': CategoriaProducto.objects.filter(activo=True).order_by('orden', 'nombre'),
+        'marcas': MarcaProducto.objects.filter(activo=True).order_by('nombre'),
+        'clientes': Cliente.objects.all()[:20],
+        'metodos_pago': [('efectivo', 'Efectivo'), ('transferencia', 'Transferencia'), ('tarjeta', 'Tarjeta'), ('deposito', 'Depósito'), ('otro', 'Otro')],
+        'productos_api_url': reverse('tienda:pos_api_productos'),
+        'clientes_api_url': reverse('tienda:pos_api_clientes_buscar'),
+        'crear_cliente_api_url': reverse('tienda:pos_api_clientes_crear'),
+        'crear_venta_api_url': reverse('tienda:pos_api_ventas_crear'),
+        'dashboard_url': reverse('tienda:admin_reportes'),
+    })
+
+
+def _producto_pos_dict(producto):
+    imagen = producto.imagen_destacada
+    return {
+        'id': producto.id,
+        'nombre': producto.nombre,
+        'codigo': producto.codigo_sku,
+        'precio': f'{producto.precio_actual:.2f}',
+        'precio_formateado': formato_quetzales(producto.precio_actual),
+        'stock': producto.stock,
+        'imagen': imagen.url if imagen else '',
+        'categoria': producto.categoria.nombre if producto.categoria_id else '',
+        'categoria_id': producto.categoria_id,
+        'marca': producto.marca.nombre if producto.marca_id else '',
+        'marca_id': producto.marca_id,
+    }
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+@require_GET
+def pos_api_productos(request):
+    productos = Producto.objects.filter(activo=True, permite_compra=True).select_related('categoria', 'marca').order_by('nombre')
+    q = request.GET.get('q', '').strip()
+    categoria = request.GET.get('categoria')
+    marca = request.GET.get('marca')
+    if q:
+        productos = productos.filter(Q(nombre__icontains=q) | Q(codigo_sku__icontains=q) | Q(marca__nombre__icontains=q) | Q(categoria__nombre__icontains=q))
+    if categoria:
+        productos = productos.filter(categoria_id=categoria)
+    if marca:
+        productos = productos.filter(marca_id=marca)
+    return JsonResponse({'productos': [_producto_pos_dict(producto) for producto in productos[:80]]})
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+@require_GET
+def pos_api_clientes_buscar(request):
+    q = request.GET.get('q', '').strip()
+    clientes = Cliente.objects.all()
+    if q:
+        clientes = clientes.filter(Q(nombre__icontains=q) | Q(telefono__icontains=q) | Q(nit__icontains=q) | Q(email__icontains=q))
+    return JsonResponse({'clientes': [{'id': c.id, 'nombre': c.nombre, 'telefono': c.telefono or '', 'nit': c.nit or '', 'email': c.email or ''} for c in clientes[:20]]})
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+@require_POST
+def pos_api_clientes_crear(request):
+    try:
+        data = json.loads(request.body.decode('utf-8') or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'ok': False, 'mensaje': 'Solicitud inválida.'}, status=400)
+    form = ClienteForm(data)
+    if form.is_valid():
+        cliente = form.save()
+        return JsonResponse({'ok': True, 'cliente': {'id': cliente.id, 'nombre': cliente.nombre, 'telefono': cliente.telefono or '', 'nit': cliente.nit or '', 'email': cliente.email or ''}})
+    return JsonResponse({'ok': False, 'errores': form.errors, 'mensaje': 'Revise los datos del cliente.'}, status=400)
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+@require_POST
+def pos_api_ventas_crear(request):
+    try:
+        data = json.loads(request.body.decode('utf-8') or '{}')
+        cliente = Cliente.objects.filter(pk=data.get('cliente_id')).first() if data.get('cliente_id') else None
+        pago = data.get('pago') or {}
+        venta = crear_venta_pos(
+            usuario=request.user,
+            cliente=cliente,
+            items=data.get('items') or [],
+            descuento_tipo=data.get('descuento_tipo', 'fijo'),
+            descuento_valor=data.get('descuento_valor', '0'),
+            impuesto_porcentaje=data.get('impuesto_porcentaje', '0'),
+            envio=data.get('envio', '0'),
+            monto_pagado=pago.get('monto', '0'),
+            metodo_pago=pago.get('metodo_pago', 'efectivo'),
+            referencia=pago.get('referencia', ''),
+            observaciones=pago.get('observaciones', ''),
+        )
+    except (json.JSONDecodeError, ValidationError, ValueError) as exc:
+        mensaje = '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc)
+        return JsonResponse({'ok': False, 'mensaje': mensaje}, status=400)
+    return JsonResponse({'ok': True, 'venta_id': venta.id, 'comprobante_url': reverse('tienda:pos_comprobante', kwargs={'pk': venta.pk}), 'mensaje': 'Venta registrada correctamente'})
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+def pos_comprobante(request, pk):
+    venta = get_object_or_404(Venta.objects.select_related('cliente', 'usuario').prefetch_related('detalles__producto', 'pagos'), pk=pk)
+    return render(request, 'tienda/pos/comprobante.html', {'venta': venta, 'ultimo_pago': venta.pagos.first()})
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+def agregar_pago_pos(request, pk):
+    venta = get_object_or_404(Venta.objects.select_related('cliente').prefetch_related('pagos', 'detalles'), pk=pk)
+    form = PagoVentaForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        try:
+            agregar_pago_venta(venta=venta, usuario=request.user, **form.cleaned_data)
+            messages.success(request, 'Pago registrado correctamente.')
+            return redirect('tienda:pos_comprobante', pk=venta.pk)
+        except Exception as exc:
+            messages.error(request, str(exc))
+    return render(request, 'tienda/pos/agregar_pago.html', {'venta': venta, 'form': form})
+
+
+@login_required
+@grupo_requerido('Administrador', 'Tienda', 'Ventas')
+def anular_venta_pos(request, pk):
+    venta = get_object_or_404(Venta, pk=pk)
+    if request.method == 'POST':
+        anular_venta(venta)
+        messages.warning(request, 'Venta anulada y stock devuelto.')
+    return redirect('tienda:admin_reportes')
+
+
 def admin_reportes(request):
     desde = request.GET.get('desde')
     hasta = request.GET.get('hasta')
-    ventas = Pedido.objects.filter(estado_pago=Pedido.EstadoPago.CONFIRMADO)
+    estado = request.GET.get('estado')
+    cliente_q = request.GET.get('cliente', '').strip()
+    origen = request.GET.get('origen')
+    ventas = Venta.objects.exclude(estado='anulado').select_related('cliente')
     if desde:
-        ventas = ventas.filter(fecha_creacion__date__gte=desde)
+        ventas = ventas.filter(fecha__date__gte=desde)
     if hasta:
-        ventas = ventas.filter(fecha_creacion__date__lte=hasta)
+        ventas = ventas.filter(fecha__date__lte=hasta)
+    if estado:
+        ventas = ventas.filter(estado=estado)
+    if origen:
+        ventas = ventas.filter(origen=origen)
+    if cliente_q:
+        ventas = ventas.filter(Q(cliente__nombre__icontains=cliente_q) | Q(cliente__telefono__icontains=cliente_q) | Q(cliente__nit__icontains=cliente_q))
+
+    detalle_expr = ExpressionWrapper(F('precio_unitario') * F('cantidad'), output_field=DecimalField(max_digits=12, decimal_places=2))
+    costo_expr = ExpressionWrapper(F('precio_costo_unitario') * F('cantidad'), output_field=DecimalField(max_digits=12, decimal_places=2))
+    detalles = DetalleVenta.objects.filter(venta__in=ventas)
+    ventas_lista = list(ventas.prefetch_related('detalles', 'pagos'))
+    total_vendido = sum((venta.total for venta in ventas_lista), Decimal('0.00'))
+    costo_total = sum((venta.costo_total for venta in ventas_lista), Decimal('0.00'))
+    total_pagado = sum((venta.total_pagado for venta in ventas_lista), Decimal('0.00'))
+    ventas_por_dia = list(detalles.values('venta__fecha__date').annotate(total=Sum(detalle_expr), costo=Sum(costo_expr)).order_by('venta__fecha__date'))
+    for dia in ventas_por_dia:
+        dia['ganancia'] = (dia['total'] or Decimal('0.00')) - (dia['costo'] or Decimal('0.00'))
     return render(request, 'tienda/admin/reportes.html', {
-        'total_ventas': ventas.aggregate(s=Sum('total'))['s'] or 0,
-        'pedidos_estado': Pedido.objects.values('estado').annotate(total=Count('id')),
-        'pedidos_tipo_entrega': Pedido.objects.values('tipo_entrega').annotate(total=Count('id')),
-        'total_envios': ventas.aggregate(s=Sum('costo_envio'))['s'] or 0,
-        'mas_vendidos': DetallePedido.objects.values('nombre_producto_snapshot').annotate(cantidad=Sum('cantidad')).order_by('-cantidad')[:10],
-        'bajo_stock': Producto.objects.filter(stock__lte=5).order_by('stock')[:20],
+        'ventas': ventas_lista,
+        'total_vendido': total_vendido,
+        'costo_total': costo_total,
+        'ganancia_total': total_vendido - costo_total,
+        'cantidad_ventas': len(ventas_lista),
+        'ticket_promedio': (total_vendido / len(ventas_lista)) if ventas_lista else Decimal('0.00'),
+        'total_pagado': total_pagado,
+        'saldo_pendiente': total_vendido - total_pagado,
+        'ventas_por_dia': ventas_por_dia,
+        'estados': Venta.ESTADOS,
+        'origenes': Venta.ORIGENES,
     })
