@@ -1,0 +1,5 @@
+{% extends 'tienda/admin/_base_admin_tienda.html' %}
+{% block tienda_admin_content %}
+<div class="d-flex justify-content-between align-items-center mb-3"><h3>Clientes POS</h3><a class="btn btn-success" href="{% url 'tienda:pos' %}">Volver al POS</a></div>
+<div class="card"><div class="table-responsive"><table id="tablaClientes" class="table table-striped table-hover datatable"><thead><tr><th>Nombre</th><th>Teléfono</th><th>Correo</th><th>NIT</th><th>DPI</th><th>Dirección</th><th>Fecha</th></tr></thead><tbody>{% for cliente in clientes %}<tr><td>{{ cliente.nombre }}</td><td>{{ cliente.telefono|default:'-' }}</td><td>{{ cliente.email|default:'-' }}</td><td>{{ cliente.nit|default:'-' }}</td><td>{{ cliente.dpi|default:'-' }}</td><td>{{ cliente.direccion|default:'-' }}</td><td>{{ cliente.fecha_creacion|date:'d/m/Y H:i' }}</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

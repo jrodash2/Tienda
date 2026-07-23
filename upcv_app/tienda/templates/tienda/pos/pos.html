@@ -1,7 +1,7 @@
 {% extends 'tienda/pos/pos_base.html' %}
 {% load static moneda_filters %}
 {% block content %}
-<div class="pos-page" id="posApp" data-productos-url="{{ productos_api_url }}" data-clientes-url="{{ clientes_api_url }}" data-crear-cliente-url="{{ crear_cliente_api_url }}" data-crear-venta-url="{{ crear_venta_api_url }}" data-dashboard-url="{{ dashboard_url }}">
+<div class="pos-page" id="posApp" data-productos-url="{{ productos_api_url }}" data-clientes-url="{{ clientes_api_url }}" data-crear-cliente-url="{{ crear_cliente_api_url }}" data-crear-venta-url="{{ crear_venta_api_url }}" data-crear-cotizacion-url="{{ crear_cotizacion_api_url }}" data-dashboard-url="{{ dashboard_url }}">
   <div id="posAlert" class="pos-alert"></div>
   <div id="posLoading" class="pos-loading"><div class="spinner-border text-light" role="status"><span class="visually-hidden">Guardando...</span></div></div>
   <div class="pos-topbar">
@@ -12,6 +12,9 @@
     <button id="btnNuevaVenta" class="btn btn-outline-primary" type="button">Nueva venta</button>
     <button id="btnTopPagar" class="btn btn-pay" type="button" disabled>Pagar</button>
     <button id="btnFullscreen" class="btn btn-outline-secondary" type="button">Pantalla completa</button>
+    <a class="btn btn-outline-primary" href="{{ cotizaciones_url }}">Cotizaciones</a>
+    <a class="btn btn-outline-primary" href="{{ clientes_url }}">Clientes</a>
+    <a class="btn btn-outline-primary" href="{{ pagos_pendientes_url }}">Pagos pendientes</a>
     <a class="btn btn-outline-dark" href="{{ dashboard_url }}">Volver al panel</a>
   </div>
   <div class="pos-layout">
@@ -41,6 +44,7 @@
         <button id="btnMantener" class="btn btn-outline-secondary btn-lg" type="button">Mantener</button>
         <button id="btnReiniciar" class="btn btn-pos-danger btn-lg" type="button">Reiniciar</button>
         <button id="btnPendiente" class="btn btn-outline-primary btn-lg" type="button" disabled>Guardar pendiente</button>
+        <button id="btnGuardarCotizacion" class="btn btn-warning btn-lg" type="button" disabled>Guardar como cotización</button>
         <button id="btnPagar" class="btn btn-pay btn-lg" type="button" disabled>Pagar ahora</button>
         <a id="btnComprobante" class="btn btn-outline-dark btn-lg disabled" href="#" target="_blank">Generar comprobante</a>
       </div>
