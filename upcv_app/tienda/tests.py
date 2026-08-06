@@ -1,15 +1,19 @@
+import json
 from decimal import Decimal
 
+from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
+from django.urls import reverse
 
 from tienda.models import CategoriaProducto, Cliente, CotizacionPOS, DetalleCotizacionPOS, PagoVenta, Producto
-from tienda.services.pos_service import crear_venta_pos
+from tienda.services.pos_service import agregar_pago_venta, crear_venta_pos
 
 
 class VentaGananciasPOSTests(TestCase):
     def setUp(self):
         self.usuario = get_user_model().objects.create_user(username='vendedor', password='test')
+        self.usuario.groups.add(Group.objects.get(name='Ventas'))
         self.categoria = CategoriaProducto.objects.create(nombre='General')
         self.cliente = Cliente.objects.create(nombre='Consumidor final')
 
@@ -58,6 +62,75 @@ class VentaGananciasPOSTests(TestCase):
         self.assertEqual(venta.ganancia_cobrada.quantize(Decimal('0.01')), Decimal('33.33'))
         self.assertEqual(venta.saldo_pendiente, Decimal('20.00'))
         self.assertEqual(venta.estado, 'pagado_parcial')
+
+    def test_venta_credito_descuenta_stock_sin_crear_pago(self):
+        producto = self.crear_producto('80.00')
+        venta = crear_venta_pos(
+            usuario=self.usuario,
+            cliente=self.cliente,
+            items=[{'producto_id': producto.id, 'cantidad': 2}],
+            monto_pagado=Decimal('0.00'),
+            tipo_pago='credito',
+        )
+
+        producto.refresh_from_db()
+        self.assertEqual(producto.stock, 8)
+        self.assertEqual(venta.estado, 'credito')
+        self.assertEqual(venta.total, Decimal('240.00'))
+        self.assertEqual(venta.total_pagado, Decimal('0.00'))
+        self.assertEqual(venta.saldo_pendiente, Decimal('240.00'))
+        self.assertEqual(venta.ganancia_bruta, Decimal('80.00'))
+        self.assertEqual(venta.ganancia_cobrada, Decimal('0.00'))
+        self.assertFalse(PagoVenta.objects.filter(venta=venta).exists())
+
+    def test_venta_credito_pasa_a_parcial_y_pagada_con_pagos_posteriores(self):
+        producto = self.crear_producto('80.00')
+        venta = crear_venta_pos(
+            usuario=self.usuario,
+            cliente=self.cliente,
+            items=[{'producto_id': producto.id, 'cantidad': 1}],
+            tipo_pago='credito',
+        )
+
+        agregar_pago_venta(venta=venta, usuario=self.usuario, monto=Decimal('20.00'))
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, 'pagado_parcial')
+        self.assertEqual(venta.saldo_pendiente, Decimal('100.00'))
+
+        agregar_pago_venta(venta=venta, usuario=self.usuario, monto=Decimal('100.00'))
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, 'pagado')
+        self.assertEqual(venta.saldo_pendiente, Decimal('0.00'))
+
+    def test_endpoint_registra_credito_y_devuelve_respuesta_esperada(self):
+        producto = self.crear_producto('80.00')
+        self.client.force_login(self.usuario)
+
+        response = self.client.post(
+            reverse('tienda:pos_api_ventas_crear'),
+            data=json.dumps({
+                'cliente_id': self.cliente.id,
+                'items': [{'producto_id': producto.id, 'cantidad': 1}],
+                'pago': {
+                    'tipo': 'credito',
+                    'monto': '0.00',
+                    'metodo_pago': '',
+                    'referencia': '',
+                    'observaciones': 'Venta registrada al crédito',
+                },
+            }),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['ok'])
+        self.assertEqual(data['estado'], 'credito')
+        self.assertEqual(data['pagado'], '0.00')
+        self.assertEqual(data['saldo'], '120.00')
+        self.assertEqual(data['mensaje'], 'Venta registrada al crédito correctamente.')
+        self.assertFalse(PagoVenta.objects.filter(venta_id=data['venta_id']).exists())
 
     def test_venta_sin_costo_queda_detectable_para_alerta(self):
         producto = self.crear_producto('0.00')
