@@ -229,3 +229,14 @@ class TemplateOrderingTests(SimpleTestCase):
         template_path = Path(__file__).resolve().parent / 'templates' / 'tienda' / 'admin' / '_base_admin_tienda.html'
         first_line = template_path.read_text(encoding='utf-8').splitlines()[0]
         self.assertEqual(first_line, "{% extends 'almacen/base.html' %}")
+
+    def test_pos_javascript_registra_eventos_mediante_helper_seguro(self):
+        from pathlib import Path
+
+        js_path = Path(__file__).resolve().parent.parent / 'static' / 'tienda' / 'js' / 'pos.js'
+        javascript = js_path.read_text(encoding='utf-8')
+        self.assertIn('function escuchar(id, evento, handler)', javascript)
+        self.assertIn('if (!elemento)', javascript)
+        self.assertNotIn("$('btnPagoCompleto').addEventListener", javascript)
+        self.assertNotIn("$('btnGuardarCliente').addEventListener", javascript)
+        self.assertNotIn("$('btnGuardarCotizacion').addEventListener", javascript)
