@@ -492,20 +492,45 @@ class Venta(models.Model):
         saldo = self.total - self.total_pagado
         return saldo if saldo > 0 else Decimal('0.00')
 
-    def actualizar_estado_pago(self, commit=True):
+    @property
+    def estado_real(self):
         if self.estado == 'anulado':
-            return self.estado
-        total_pagado = self.total_pagado
-        total = self.total
-        if total_pagado >= total and total > 0:
-            self.estado = 'pagado'
-        elif total_pagado > 0:
-            self.estado = 'pagado_parcial'
-        else:
-            self.estado = 'credito' if total > 0 else 'pendiente'
-        if commit:
-            self.save(update_fields=['estado'])
-        return self.estado
+            return 'anulado'
+        total = self.total or Decimal('0.00')
+        pagado = self.total_pagado or Decimal('0.00')
+        if total <= 0:
+            return 'pendiente'
+        if pagado <= 0:
+            return 'credito'
+        if pagado < total:
+            return 'pagado_parcial'
+        return 'pagado'
+
+    @property
+    def estado_real_display(self):
+        return dict(self.ESTADOS).get(self.estado_real, self.estado_real)
+
+    @property
+    def estado_real_badge_class(self):
+        return {
+            'pendiente': 'bg-secondary',
+            'credito': 'bg-warning text-dark',
+            'pagado_parcial': 'bg-info text-dark',
+            'pagado': 'bg-success',
+            'anulado': 'bg-danger',
+        }.get(self.estado_real, 'bg-secondary')
+
+    def actualizar_estado_por_pagos(self, guardar=True):
+        estado = self.estado_real
+        if self.estado != estado:
+            self.estado = estado
+            if guardar and self.pk:
+                self.save(update_fields=['estado'])
+        return estado
+
+    def actualizar_estado_pago(self, commit=True):
+        """Alias compatible para integraciones anteriores."""
+        return self.actualizar_estado_por_pagos(guardar=commit)
 
 
 class DetalleVenta(models.Model):

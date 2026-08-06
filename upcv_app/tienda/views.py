@@ -919,6 +919,7 @@ def pos_cotizacion_convertir_venta(request, cotizacion_id):
                 DetalleVenta.objects.create(venta=venta, producto=producto, cantidad=detalle.cantidad, precio_unitario=detalle.precio_unitario, precio_costo_unitario=detalle.precio_costo_unitario)
                 producto.stock -= detalle.cantidad
                 producto.save(update_fields=['stock', 'fecha_actualizacion'])
+            venta.actualizar_estado_por_pagos()
             cotizacion.estado = 'convertida'
             cotizacion.venta_convertida = venta
             cotizacion.save(update_fields=['estado', 'venta_convertida'])

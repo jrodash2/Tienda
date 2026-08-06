@@ -31,12 +31,14 @@
     .summary-total td { font-size: 14px; font-weight: 800; background: #f9fafb; }
     .balance-due td { font-weight: 800; color: #b91c1c; }
     .status-badge { display: inline-block; padding: 4px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; background: #dbeafe; color: #1d4ed8; }
+    .payment-alert { border: 1px solid #f59e0b; background: #fff7ed; color: #92400e; padding: 6px 8px; font-size: 10px; margin-top: 6px; }
+    .payment-alert-success { border-color: #16a34a; background: #ecfdf5; color: #166534; }
     .observations { border: 1px solid #e5e7eb; border-top: none; padding: 8px; font-size: 12px; min-height: 35px; }
     .footer { margin-top: 18px; border-top: 1px solid #e5e7eb; padding-top: 10px; font-size: 11px; color: #4b5563; text-align: center; }
     .no-break { page-break-inside: avoid; }
     .no-print { display: block; }
     @media screen { body { background: #f3f4f6; padding: 20px; } .actions { max-width: 7.9in; margin: 0 auto 15px; display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; } .btn { border: none; padding: 10px 16px; border-radius: 8px; font-weight: 700; cursor: pointer; text-decoration: none; display: inline-block; font-size: 14px; } .btn-print { background: #2563eb; color: #fff; } .btn-pdf { background: #16a34a; color: #fff; } .btn-back { background: #374151; color: #fff; } .invoice-page { padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,.10); } }
-    @media print { body { background: #fff; } .no-print { display: none !important; } .invoice-page { box-shadow: none; max-width: 100%; } }
+    @media print { @page { size: letter; margin: .7cm; } body { background: #fff; padding: 0; font-size: 10px; } .no-print { display: none !important; } .invoice-page { width: 100%; max-width: 100%; min-height: auto; box-shadow: none; padding: 0; margin: 0; } th, td { padding: 4px 5px; font-size: 9px; } .section-title { margin-top: 6px; padding: 4px 6px; font-size: 10px; } .brand-logo { max-width: 70px; max-height: 55px; } .footer { margin-top: 6px; } }
   </style>
 </head>
 <body>
@@ -68,7 +70,7 @@
       <h2>Comprobante de venta</h2>
       <p><strong>No.</strong> #{{ venta.id|stringformat:'06d' }}</p>
       <p><strong>Fecha:</strong> {{ venta.fecha|date:'d/m/Y H:i' }}</p>
-      <p><strong>Estado:</strong> <span class="status-badge">{{ venta.get_estado_display }}</span></p>
+      <p><strong>Estado:</strong> <span class="status-badge">{{ venta.estado_real_display }}</span></p>
       <p><strong>Vendedor:</strong> {{ venta.nombre_vendedor }}</p>
     </div>
   </div>
@@ -88,7 +90,7 @@
     <thead><tr><th style="width: 60px;">Cant.</th><th>Descripción</th><th style="width: 130px;" class="text-right">Precio unitario</th><th style="width: 130px;" class="text-right">Subtotal</th></tr></thead>
     <tbody>
       {% for detalle in venta.detalles.all %}
-      <tr><td>{{ detalle.cantidad }}</td><td><strong>{{ detalle.producto.nombre }}</strong><br><small>Código: {{ detalle.producto.codigo_sku|default:'-' }}</small></td><td class="text-right">{{ detalle.precio_unitario|quetzales }}</td><td class="text-right">{{ detalle.subtotal|quetzales }}</td></tr>
+      <tr><td>{{ detalle.cantidad }}</td><td><strong>{{ detalle.producto.nombre|truncatechars:85 }}</strong><br><small>Código: {{ detalle.producto.codigo_sku|default:'-' }}</small></td><td class="text-right">{{ detalle.precio_unitario|quetzales }}</td><td class="text-right">{{ detalle.subtotal|quetzales }}</td></tr>
       {% empty %}
       <tr><td colspan="4">No hay productos registrados.</td></tr>
       {% endfor %}
@@ -107,7 +109,7 @@
     </table>
   </div>
 
-  {% if venta.estado == 'credito' %}<div style="margin-top:12px;padding:10px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;"><strong>Venta al crédito.</strong> El saldo completo está pendiente de pago.</div>{% endif %}
+  {% if venta.saldo_pendiente > 0 %}{% if venta.total_pagado > 0 %}<div class="payment-alert"><strong>Venta con pago parcial.</strong> Saldo pendiente de pago: {{ venta.saldo_pendiente|quetzales }}.</div>{% else %}<div class="payment-alert"><strong>Venta al crédito.</strong> El total está pendiente de pago: {{ venta.saldo_pendiente|quetzales }}.</div>{% endif %}{% else %}<div class="payment-alert payment-alert-success"><strong>Venta pagada completamente.</strong> No existe saldo pendiente.</div>{% endif %}
 
   <div class="section-title">Pagos registrados</div>
   <table>
@@ -116,7 +118,7 @@
       {% for pago in venta.pagos.all %}
       <tr><td>{{ pago.fecha|date:'d/m/Y H:i' }}</td><td>{{ pago.get_metodo_pago_display }}</td><td>{{ pago.referencia|default:'-' }}</td><td class="text-right">{{ pago.monto|quetzales }}</td></tr>
       {% empty %}
-      <tr><td colspan="4">{% if venta.estado == 'credito' %}No hay pagos registrados. Venta realizada al crédito.{% else %}No hay pagos registrados.{% endif %}</td></tr>
+      <tr><td colspan="4">No hay pagos registrados. Esta venta fue registrada al crédito.</td></tr>
       {% endfor %}
     </tbody>
   </table>

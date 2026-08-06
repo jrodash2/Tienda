@@ -6,20 +6,26 @@
   <meta charset="UTF-8">
   <title>Comprobante de venta #{{ venta.id|stringformat:'06d' }}</title>
   <style>
-    @page { size: letter; margin: 1cm; }
-    * { box-sizing: border-box; } html, body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; color: #111827; font-size: 11px; }
+    @page { size: letter; margin: 0.7cm; }
+    * { box-sizing: border-box; } html, body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; color: #111827; font-size: 10px; }
+    .invoice-page { width: 100%; max-width: 100%; margin: 0; padding: 0; }
+    p { margin: 2px 0; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    th, td { border: 1px solid #d1d5db; padding: 5px; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; }
+    th, td { border: 1px solid #d1d5db; padding: 4px 5px; vertical-align: top; word-wrap: break-word; overflow-wrap: break-word; font-size: 9px; }
     th { background: #f3f4f6; font-weight: bold; }
-    .header-table td { border: none; padding: 0 0 10px 0; }
-    .logo { width: 85px; height: 85px; object-fit: contain; }
-    .company-name { font-size: 18px; font-weight: bold; margin: 0; }
-    .title { font-size: 20px; font-weight: bold; text-align: right; text-transform: uppercase; }
-    .section-title { background: #111827; color: #fff; padding: 7px; margin-top: 12px; font-weight: bold; text-transform: uppercase; }
+    .header-table td { border: none; padding: 0 0 5px 0; }
+    .logo { max-width: 70px; max-height: 55px; object-fit: contain; }
+    .company-name { font-size: 15px; font-weight: bold; margin: 0 0 3px; }
+    .title { font-size: 14px; font-weight: bold; text-align: right; text-transform: uppercase; }
+    .section-title { background: #111827; color: #fff; padding: 4px 6px; margin-top: 6px; font-size: 10px; font-weight: bold; text-transform: uppercase; }
     .text-right { text-align: right; }
-    .summary { width: 40%; margin-left: 60%; margin-top: 10px; }
-    .summary-total td { font-size: 14px; font-weight: bold; background: #f9fafb; }
-    .footer { margin-top: 18px; border-top: 1px solid #d1d5db; padding-top: 10px; text-align: center; color: #4b5563; }
+    .summary { width: 45%; margin-left: 55%; margin-top: 6px; }
+    .summary-total td { font-size: 11px; font-weight: bold; background: #f9fafb; }
+    .payment-alert { border: 1px solid #f59e0b; background: #fff7ed; color: #92400e; padding: 5px 6px; font-size: 9px; margin-top: 6px; }
+    .payment-alert-success { border-color: #16a34a; background: #ecfdf5; color: #166534; }
+    .product-name { font-size: 9px; line-height: 1.1; }
+    .no-break { page-break-inside: avoid; }
+    .footer { margin-top: 6px; border-top: 1px solid #d1d5db; padding-top: 5px; text-align: center; font-size: 9px; color: #4b5563; }
   </style>
 </head>
 <body>
@@ -45,7 +51,7 @@
         <div class="title">Comprobante de venta</div>
         <p><strong>No.</strong> #{{ venta.id|stringformat:'06d' }}</p>
         <p><strong>Fecha:</strong> {{ venta.fecha|date:'d/m/Y H:i' }}</p>
-        <p><strong>Estado:</strong> {{ venta.get_estado_display }}</p>
+        <p><strong>Estado:</strong> {{ venta.estado_real_display }}</p>
         <p><strong>Vendedor:</strong> {{ venta.nombre_vendedor }}</p>
       </td>
     </tr>
@@ -55,14 +61,14 @@
   <table><tr><td><strong>Cliente:</strong> {{ venta.cliente.nombre|default:'Consumidor final' }}</td><td><strong>Teléfono:</strong> {{ venta.cliente.telefono|default:'No registrado' }}</td></tr><tr><td><strong>Correo:</strong> {{ venta.cliente.email|default:'No registrado' }}</td><td><strong>NIT:</strong> {{ venta.cliente.nit|default:'CF' }}</td></tr><tr><td><strong>DPI:</strong> {{ venta.cliente.dpi|default:'No registrado' }}</td><td><strong>Dirección:</strong> {{ venta.cliente.direccion|default:'No registrada' }}</td></tr></table>
 
   <div class="section-title">Detalle de productos</div>
-  <table><thead><tr><th style="width: 10%;">Cant.</th><th>Descripción</th><th style="width: 20%;" class="text-right">Precio unitario</th><th style="width: 20%;" class="text-right">Subtotal</th></tr></thead><tbody>{% for detalle in venta.detalles.all %}<tr><td>{{ detalle.cantidad }}</td><td><strong>{{ detalle.producto.nombre }}</strong><br>Código: {{ detalle.producto.codigo_sku|default:'-' }}</td><td class="text-right">{{ detalle.precio_unitario|quetzales }}</td><td class="text-right">{{ detalle.subtotal|quetzales }}</td></tr>{% empty %}<tr><td colspan="4">No hay productos registrados.</td></tr>{% endfor %}</tbody></table>
+  <table><thead><tr><th style="width: 8%;">Cant.</th><th style="width: 52%;">Descripción</th><th style="width: 20%;" class="text-right">Precio</th><th style="width: 20%;" class="text-right">Subtotal</th></tr></thead><tbody>{% for detalle in venta.detalles.all %}<tr><td>{{ detalle.cantidad }}</td><td class="product-name"><strong>{{ detalle.producto.nombre|truncatechars:85 }}</strong><br>Código: {{ detalle.producto.codigo_sku|default:'-' }}</td><td class="text-right">{{ detalle.precio_unitario|quetzales }}</td><td class="text-right">{{ detalle.subtotal|quetzales }}</td></tr>{% empty %}<tr><td colspan="4">No hay productos registrados.</td></tr>{% endfor %}</tbody></table>
 
-  <table class="summary"><tr><td>Subtotal</td><td class="text-right">{{ venta.subtotal_productos|quetzales }}</td></tr><tr><td>Descuento</td><td class="text-right">{{ venta.descuento_monto|quetzales }}</td></tr><tr><td>Impuesto</td><td class="text-right">{{ venta.impuesto_monto|quetzales }}</td></tr><tr><td>Envío</td><td class="text-right">{{ venta.envio|quetzales }}</td></tr><tr class="summary-total"><td>Total</td><td class="text-right">{{ venta.total|quetzales }}</td></tr><tr><td>Pagado</td><td class="text-right">{{ venta.total_pagado|quetzales }}</td></tr><tr><td><strong>Saldo pendiente</strong></td><td class="text-right"><strong>{{ venta.saldo_pendiente|quetzales }}</strong></td></tr></table>
+  <div class="no-break"><table class="summary"><tr><td>Subtotal</td><td class="text-right">{{ venta.subtotal_productos|quetzales }}</td></tr><tr><td>Descuento</td><td class="text-right">{{ venta.descuento_monto|quetzales }}</td></tr><tr><td>Impuesto</td><td class="text-right">{{ venta.impuesto_monto|quetzales }}</td></tr><tr><td>Envío</td><td class="text-right">{{ venta.envio|quetzales }}</td></tr><tr class="summary-total"><td>Total</td><td class="text-right">{{ venta.total|quetzales }}</td></tr><tr><td>Pagado</td><td class="text-right">{{ venta.total_pagado|quetzales }}</td></tr><tr><td><strong>Saldo pendiente</strong></td><td class="text-right"><strong>{{ venta.saldo_pendiente|quetzales }}</strong></td></tr></table>
 
-  {% if venta.estado == 'credito' %}<div style="margin-top:12px;padding:10px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;"><strong>Venta al crédito.</strong> El saldo completo está pendiente de pago.</div>{% endif %}
+  {% if venta.saldo_pendiente > 0 %}{% if venta.total_pagado > 0 %}<div class="payment-alert"><strong>Venta con pago parcial.</strong> Saldo pendiente de pago: {{ venta.saldo_pendiente|quetzales }}.</div>{% else %}<div class="payment-alert"><strong>Venta al crédito.</strong> El total está pendiente de pago: {{ venta.saldo_pendiente|quetzales }}.</div>{% endif %}{% else %}<div class="payment-alert payment-alert-success"><strong>Venta pagada completamente.</strong> No existe saldo pendiente.</div>{% endif %}</div>
 
-  <div class="section-title">Pagos registrados</div>
-  <table><thead><tr><th>Fecha</th><th>Método</th><th>Referencia</th><th class="text-right">Monto</th></tr></thead><tbody>{% for pago in venta.pagos.all %}<tr><td>{{ pago.fecha|date:'d/m/Y H:i' }}</td><td>{{ pago.get_metodo_pago_display }}</td><td>{{ pago.referencia|default:'-' }}</td><td class="text-right">{{ pago.monto|quetzales }}</td></tr>{% empty %}<tr><td colspan="4">{% if venta.estado == 'credito' %}No hay pagos registrados. Venta realizada al crédito.{% else %}No hay pagos registrados.{% endif %}</td></tr>{% endfor %}</tbody></table>
+  <div class="no-break"><div class="section-title">Pagos registrados</div>
+  <table><thead><tr><th>Fecha</th><th>Método</th><th>Referencia</th><th class="text-right">Monto</th></tr></thead><tbody>{% for pago in venta.pagos.all %}<tr><td>{{ pago.fecha|date:'d/m/Y H:i' }}</td><td>{{ pago.get_metodo_pago_display }}</td><td>{{ pago.referencia|default:'-' }}</td><td class="text-right">{{ pago.monto|quetzales }}</td></tr>{% empty %}<tr><td colspan="4">No hay pagos registrados. Esta venta fue registrada al crédito.</td></tr>{% endfor %}</tbody></table></div>
 
   <div class="section-title">Observaciones</div>
   <table><tr><td>{{ venta.observaciones|default:'Gracias por su compra.' }}</td></tr></table>
