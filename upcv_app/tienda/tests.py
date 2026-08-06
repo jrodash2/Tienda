@@ -132,6 +132,47 @@ class VentaGananciasPOSTests(TestCase):
         self.assertEqual(data['mensaje'], 'Venta registrada al crédito correctamente.')
         self.assertFalse(PagoVenta.objects.filter(venta_id=data['venta_id']).exists())
 
+    def test_api_clientes_busca_por_dpi_y_devuelve_json_completo(self):
+        Cliente.objects.create(
+            nombre='María López', telefono='55551234', email='maria@example.com',
+            nit='1234-5', dpi='1234567890101', direccion='Ciudad de Guatemala',
+        )
+        self.client.force_login(self.usuario)
+
+        response = self.client.get(
+            reverse('tienda:pos_api_clientes_buscar'),
+            {'q': '1234567890101'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['ok'])
+        self.assertEqual(len(data['clientes']), 1)
+        self.assertEqual(data['clientes'][0]['nombre'], 'María López')
+        self.assertEqual(data['clientes'][0]['direccion'], 'Ciudad de Guatemala')
+
+    def test_api_clientes_crea_y_devuelve_cliente_seleccionable(self):
+        self.client.force_login(self.usuario)
+        payload = {
+            'nombre': 'Carlos Pérez', 'telefono': '44445555',
+            'email': 'carlos@example.com', 'nit': 'CF',
+            'dpi': '9876543210101', 'direccion': 'Mixco',
+        }
+
+        response = self.client.post(
+            reverse('tienda:pos_api_clientes_crear'),
+            data=json.dumps(payload), content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['ok'])
+        self.assertEqual(data['cliente']['dpi'], payload['dpi'])
+        self.assertEqual(data['cliente']['direccion'], payload['direccion'])
+        self.assertTrue(Cliente.objects.filter(pk=data['cliente']['id'], nombre='Carlos Pérez').exists())
+
     def test_venta_sin_costo_queda_detectable_para_alerta(self):
         producto = self.crear_producto('0.00')
         venta = crear_venta_pos(

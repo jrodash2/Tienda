@@ -4,7 +4,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const state = { carrito: [], productos: [], cliente: null, categoria: '', marca: '', ultimaVentaUrl: '' };
   const $ = (id) => document.getElementById(id);
   const money = (value) => `Q${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const csrf = () => (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+  function obtenerCSRFToken() {
+    const input = document.querySelector('[name=csrfmiddlewaretoken]');
+    if (input) return input.value;
+    const cookie = document.cookie.split('; ').find(row => row.startsWith('csrftoken='));
+    return cookie ? decodeURIComponent(cookie.split('=')[1]) : '';
+  }
+  const csrf = obtenerCSRFToken;
   const alertBox = $('posAlert');
 
   function mostrarAlerta(msg, tipo = 'warning') {
@@ -104,20 +110,67 @@ document.addEventListener('DOMContentLoaded', () => {
     $('clienteActualDetalle').textContent = cliente ? `${cliente.telefono || 'Sin teléfono'} ${cliente.nit ? '· NIT ' + cliente.nit : ''}` : 'Walk-in customer';
   }
 
-  async function buscarClientes() {
-    const res = await fetch(`${app.dataset.clientesUrl}?q=${encodeURIComponent($('buscarCliente').value)}`);
-    const data = await res.json();
-    $('clientesResultados').innerHTML = data.clientes.map(c => `<button type="button" class="list-group-item list-group-item-action" data-cliente='${JSON.stringify(c)}'>${c.nombre}<br><small>${c.telefono || ''} ${c.nit || ''}</small></button>`).join('');
+  function renderClientes(clientes) {
+    const contenedor = $('clientesResultados');
+    contenedor.replaceChildren();
+    if (!clientes.length) {
+      contenedor.innerHTML = '<div class="text-muted p-2">No se encontraron clientes.</div>';
+      return;
+    }
+    clientes.forEach(cliente => {
+      const boton = document.createElement('button');
+      boton.type = 'button';
+      boton.className = 'list-group-item list-group-item-action';
+      boton.dataset.cliente = JSON.stringify(cliente);
+      const nombre = document.createElement('span');
+      nombre.textContent = cliente.nombre;
+      const detalle = document.createElement('small');
+      detalle.className = 'd-block';
+      detalle.textContent = `${cliente.telefono || 'Sin teléfono'}${cliente.nit ? ` · NIT ${cliente.nit}` : ''}`;
+      boton.append(nombre, detalle);
+      contenedor.appendChild(boton);
+    });
+  }
+
+  async function buscarClientes(query = $('buscarCliente').value) {
+    try {
+      const url = `${window.POS_URLS.buscarClientes}?q=${encodeURIComponent(query || '')}`;
+      const response = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } });
+      const text = await response.text();
+      let data;
+      try { data = JSON.parse(text); } catch (error) {
+        console.error('Respuesta no JSON al buscar clientes:', text);
+        throw new Error('El servidor no devolvió JSON al buscar clientes. Verifique la sesión y la URL en Network.');
+      }
+      if (!response.ok || !data.ok) throw new Error(data.mensaje || 'No se pudieron cargar los clientes.');
+      renderClientes(data.clientes || []);
+    } catch (error) {
+      mostrarAlerta(error.message || 'No se pudieron cargar los clientes.');
+    }
   }
 
   async function crearCliente() {
-    const payload = { nombre: $('clienteNombre').value, telefono: $('clienteTelefono').value, nit: $('clienteNit').value, email: $('clienteEmail').value, direccion: $('clienteDireccion').value };
-    const res = await fetch(app.dataset.crearClienteUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() }, body: JSON.stringify(payload) });
-    const data = await res.json();
-    if (!data.ok) return mostrarAlerta(data.mensaje || 'No se pudo crear el cliente.');
-    seleccionarCliente(data.cliente);
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCliente')).hide();
-    mostrarAlerta('Cliente creado y seleccionado.', 'success');
+    const payload = { nombre: $('cliente_nombre')?.value.trim() || '', telefono: $('cliente_telefono')?.value.trim() || '', nit: $('cliente_nit')?.value.trim() || '', dpi: $('cliente_dpi')?.value.trim() || '', email: $('cliente_email')?.value.trim() || '', direccion: $('cliente_direccion')?.value.trim() || '' };
+    if (!payload.nombre) return mostrarAlerta('Ingrese el nombre del cliente.');
+    mostrarLoading(true);
+    try {
+      const response = await fetch(window.POS_URLS.crearCliente, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': obtenerCSRFToken(), 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }, body: JSON.stringify(payload) });
+      const text = await response.text();
+      let data;
+      try { data = JSON.parse(text); } catch (error) {
+        console.error('Respuesta no JSON al crear cliente:', text);
+        throw new Error('El servidor no devolvió JSON al crear cliente. Verifique CSRF, sesión y URL en Network.');
+      }
+      if (!response.ok || !data.ok) throw new Error(data.mensaje || 'No se pudo crear el cliente.');
+      seleccionarCliente(data.cliente);
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCliente')).hide();
+      mostrarAlerta(data.mensaje || 'Cliente creado y seleccionado correctamente.', 'success');
+      await buscarClientes('');
+    } catch (error) {
+      mostrarAlerta(error.message || 'No se pudo crear el cliente.');
+    } finally {
+      mostrarLoading(false);
+    }
   }
 
   function abrirModalPago() {
@@ -172,7 +225,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const payload = { cliente_id: state.cliente?.id || null, items: state.carrito.map(i => ({ producto_id: i.id, cantidad: i.cantidad })), descuento_tipo: $('descuentoTipo').value, descuento_valor: $('descuentoValor').value || '0', impuesto_porcentaje: $('impuestoPorcentaje').value || '0', envio: $('envioValor').value || '0', pago: { tipo: tipoPago, monto: monto.toFixed(2), metodo_pago: tipoPago === 'credito' ? '' : $('metodo_pago')?.value || '', referencia: tipoPago === 'credito' ? '' : $('referencia_pago')?.value || '', observaciones: tipoPago === 'credito' ? 'Venta registrada al crédito' : $('observaciones_pago')?.value || '' } };
     mostrarLoading(true);
     try {
-      const res = await fetch(app.dataset.crearVentaUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf(), 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify(payload) });
+      const res = await fetch(window.POS_URLS.crearVenta, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf(), 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify(payload) });
       const responseText = await res.text();
       let data;
       try {
@@ -212,7 +265,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     mostrarLoading(true);
     try {
-      const res = await fetch(app.dataset.crearCotizacionUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf(), 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify(payload) });
+      const res = await fetch(window.POS_URLS.crearCotizacion, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf(), 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify(payload) });
       const text = await res.text();
       let data;
       try { data = JSON.parse(text); } catch (error) { console.error('Respuesta no JSON:', text); throw new Error('El servidor no devolvió JSON válido.'); }

@@ -679,11 +679,31 @@ def pos_api_productos(request):
 @grupo_requerido('Administrador', 'Tienda', 'Ventas')
 @require_GET
 def pos_api_clientes_buscar(request):
-    q = request.GET.get('q', '').strip()
-    clientes = Cliente.objects.all()
-    if q:
-        clientes = clientes.filter(Q(nombre__icontains=q) | Q(telefono__icontains=q) | Q(nit__icontains=q) | Q(email__icontains=q))
-    return JsonResponse({'clientes': [{'id': c.id, 'nombre': c.nombre, 'telefono': c.telefono or '', 'nit': c.nit or '', 'email': c.email or ''} for c in clientes[:20]]})
+    try:
+        q = request.GET.get('q', '').strip()
+        clientes = Cliente.objects.all().order_by('nombre')
+        if q:
+            clientes = clientes.filter(
+                Q(nombre__icontains=q) |
+                Q(telefono__icontains=q) |
+                Q(email__icontains=q) |
+                Q(nit__icontains=q) |
+                Q(dpi__icontains=q)
+            )
+        data = [{
+            'id': cliente.id,
+            'nombre': cliente.nombre,
+            'telefono': cliente.telefono or '',
+            'email': cliente.email or '',
+            'nit': cliente.nit or '',
+            'dpi': cliente.dpi or '',
+            'direccion': cliente.direccion or '',
+            'texto': f'{cliente.nombre} - {cliente.telefono or "Sin teléfono"}',
+        } for cliente in clientes[:20]]
+        return JsonResponse({'ok': True, 'clientes': data})
+    except Exception:
+        logger.exception('Error buscando clientes desde POS')
+        return JsonResponse({'ok': False, 'clientes': [], 'mensaje': 'Error interno al buscar clientes. Verifique las migraciones y la base de datos.'}, status=500)
 
 
 @login_required
@@ -693,12 +713,28 @@ def pos_api_clientes_crear(request):
     try:
         data = json.loads(request.body.decode('utf-8') or '{}')
     except json.JSONDecodeError:
-        return JsonResponse({'ok': False, 'mensaje': 'Solicitud inválida.'}, status=400)
-    form = ClienteForm(data)
-    if form.is_valid():
+        return JsonResponse({'ok': False, 'mensaje': 'JSON inválido.'}, status=400)
+    try:
+        form = ClienteForm(data)
+        if not form.is_valid():
+            return JsonResponse({'ok': False, 'errores': form.errors.get_json_data(), 'mensaje': 'Revise los datos del cliente.'}, status=400)
         cliente = form.save()
-        return JsonResponse({'ok': True, 'cliente': {'id': cliente.id, 'nombre': cliente.nombre, 'telefono': cliente.telefono or '', 'nit': cliente.nit or '', 'email': cliente.email or ''}})
-    return JsonResponse({'ok': False, 'errores': form.errors, 'mensaje': 'Revise los datos del cliente.'}, status=400)
+        return JsonResponse({
+            'ok': True,
+            'mensaje': 'Cliente creado correctamente.',
+            'cliente': {
+                'id': cliente.id,
+                'nombre': cliente.nombre,
+                'telefono': cliente.telefono or '',
+                'email': cliente.email or '',
+                'direccion': cliente.direccion or '',
+                'nit': cliente.nit or '',
+                'dpi': cliente.dpi or '',
+            },
+        })
+    except Exception:
+        logger.exception('Error creando cliente desde POS')
+        return JsonResponse({'ok': False, 'mensaje': 'Error interno al crear cliente. Verifique las migraciones y la base de datos.'}, status=500)
 
 
 @login_required
