@@ -235,7 +235,7 @@ class TemplateOrderingTests(SimpleTestCase):
 
         js_path = Path(__file__).resolve().parent.parent / 'static' / 'tienda' / 'js' / 'pos.js'
         javascript = js_path.read_text(encoding='utf-8')
-        self.assertIn('function escuchar(id, evento, handler)', javascript)
+        self.assertIn('function agregarEventoSeguro(id, evento, funcion)', javascript)
         self.assertIn('if (!elemento)', javascript)
         self.assertNotIn("$('btnPagoCompleto').addEventListener", javascript)
         self.assertNotIn("$('btnGuardarCliente').addEventListener", javascript)
