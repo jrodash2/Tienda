@@ -147,15 +147,23 @@ document.addEventListener('DOMContentLoaded', () => {
     guardarVentaPOS('parcial');
   }
 
-  async function guardarVentaPOS(tipoPago = 'pendiente') {
-    const monto = tipoPago === 'completo' ? totales().total : Number($('montoRecibido').value || 0);
+  function registrarPagoCredito() {
+    $('montoRecibido').value = '0.00';
+    guardarVentaPOS('credito');
+  }
+
+  async function guardarVentaPOS(tipoPago = 'credito') {
+    let monto = Number($('montoRecibido').value || 0);
     if (!state.carrito.length) return mostrarAlerta('La venta no debe guardarse si el carrito está vacío.');
     const t = totales();
-    if (tipoPago === 'parcial' && monto <= 0) return mostrarAlerta('Ingrese un monto válido para pago parcial');
+    if (tipoPago === 'completo') monto = t.total;
+    if (tipoPago === 'credito') monto = 0;
+    if (tipoPago === 'parcial' && monto <= 0) return mostrarAlerta('Ingrese un monto válido para pago parcial.');
+    if (tipoPago === 'parcial' && monto >= t.total) return mostrarAlerta('Para pagar el total use pago completo.');
     if (tipoPago === 'completo' && t.total <= 0) return mostrarAlerta('No se pudo determinar el total de la venta');
     if (monto < 0) return mostrarAlerta('No se permiten pagos negativos.');
     if (monto > t.total) return mostrarAlerta('El monto no puede ser mayor al saldo pendiente');
-    const payload = { cliente_id: state.cliente?.id || null, items: state.carrito.map(i => ({ producto_id: i.id, cantidad: i.cantidad })), descuento_tipo: $('descuentoTipo').value, descuento_valor: $('descuentoValor').value || '0', impuesto_porcentaje: $('impuestoPorcentaje').value || '0', envio: $('envioValor').value || '0', pago: { tipo: tipoPago, monto, metodo_pago: $('metodoPago').value, referencia: $('referenciaPago').value, observaciones: $('observacionesPago').value } };
+    const payload = { cliente_id: state.cliente?.id || null, items: state.carrito.map(i => ({ producto_id: i.id, cantidad: i.cantidad })), descuento_tipo: $('descuentoTipo').value, descuento_valor: $('descuentoValor').value || '0', impuesto_porcentaje: $('impuestoPorcentaje').value || '0', envio: $('envioValor').value || '0', pago: { tipo: tipoPago, monto: monto.toFixed(2), metodo_pago: tipoPago === 'credito' ? '' : $('metodoPago').value, referencia: tipoPago === 'credito' ? '' : $('referenciaPago').value, observaciones: tipoPago === 'credito' ? 'Venta al crédito' : $('observacionesPago').value } };
     mostrarLoading(true);
     try {
       const res = await fetch(app.dataset.crearVentaUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() }, body: JSON.stringify(payload) });
@@ -244,13 +252,14 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btnGuardarCliente').addEventListener('click', crearCliente);
   $('btnReiniciar').addEventListener('click', () => limpiarCarrito(true));
   $('btnNuevaVenta').addEventListener('click', () => limpiarCarrito(true));
-  $('btnMantener').addEventListener('click', () => mostrarAlerta('Venta mantenida en pantalla. Use guardar pendiente para conservarla en el sistema.', 'info'));
-  $('btnPendiente').addEventListener('click', () => guardarVentaPOS('pendiente'));
+  $('btnMantener').addEventListener('click', () => mostrarAlerta('Venta mantenida en pantalla. Use Venta al crédito para registrarla sin pago inicial.', 'info'));
+  $('btnPendiente').addEventListener('click', registrarPagoCredito);
   $('btnGuardarCotizacion').addEventListener('click', guardarComoCotizacion);
   $('btnPagar').addEventListener('click', abrirModalPago);
   $('btnTopPagar').addEventListener('click', abrirModalPago);
   $('btnPagoCompleto').addEventListener('click', registrarPagoCompleto);
   $('btnPagoParcial').addEventListener('click', registrarPagoParcial);
+  $('btnPagoCredito').addEventListener('click', registrarPagoCredito);
   $('btnFullscreen').addEventListener('click', () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen());
   document.addEventListener('keydown', e => { if (e.key === 'F2') { e.preventDefault(); $('posSearch').focus(); } if (e.key === 'F4') { e.preventDefault(); $('btnPagar').click(); } if (e.key === 'F8') { e.preventDefault(); limpiarCarrito(true); } });
 
@@ -260,6 +269,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.abrirModalPago = abrirModalPago;
   window.registrarPagoCompleto = registrarPagoCompleto;
   window.registrarPagoParcial = registrarPagoParcial;
+  window.registrarPagoCredito = registrarPagoCredito;
   window.guardarVentaPOS = guardarVentaPOS;
   window.guardarComoCotizacion = guardarComoCotizacion;
 });
