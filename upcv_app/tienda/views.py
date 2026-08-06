@@ -732,7 +732,8 @@ def pos_api_ventas_crear(request):
     except (json.JSONDecodeError, ValidationError, ValueError) as exc:
         mensaje = '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc)
         return JsonResponse({'ok': False, 'mensaje': mensaje}, status=400)
-    return JsonResponse({'ok': True, 'venta_id': venta.id, 'estado': venta.estado, 'total': f'{venta.total:.2f}', 'pagado': f'{venta.total_pagado:.2f}', 'saldo': f'{venta.saldo_pendiente:.2f}', 'comprobante_url': reverse('tienda:pos_comprobante', kwargs={'venta_id': venta.pk}), 'mensaje': 'Venta registrada correctamente'})
+    mensaje = 'Venta registrada al crédito correctamente.' if venta.estado == 'credito' else 'Venta registrada correctamente.'
+    return JsonResponse({'ok': True, 'venta_id': venta.id, 'estado': venta.estado, 'total': f'{venta.total:.2f}', 'pagado': f'{venta.total_pagado:.2f}', 'saldo': f'{venta.saldo_pendiente:.2f}', 'comprobante_url': reverse('tienda:pos_comprobante', kwargs={'venta_id': venta.pk}), 'mensaje': mensaje})
 
 
 @login_required
