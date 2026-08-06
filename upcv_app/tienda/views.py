@@ -688,7 +688,8 @@ def pos_api_clientes_buscar(request):
                 Q(telefono__icontains=q) |
                 Q(email__icontains=q) |
                 Q(nit__icontains=q) |
-                Q(dpi__icontains=q)
+                Q(dpi__icontains=q) |
+                Q(direccion__icontains=q)
             )
         data = [{
             'id': cliente.id,
@@ -699,7 +700,7 @@ def pos_api_clientes_buscar(request):
             'dpi': cliente.dpi or '',
             'direccion': cliente.direccion or '',
             'texto': f'{cliente.nombre} - {cliente.telefono or "Sin teléfono"}',
-        } for cliente in clientes[:20]]
+        } for cliente in clientes[:30]]
         return JsonResponse({'ok': True, 'clientes': data})
     except Exception:
         logger.exception('Error buscando clientes desde POS')

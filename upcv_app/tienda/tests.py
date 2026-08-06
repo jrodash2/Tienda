@@ -152,6 +152,21 @@ class VentaGananciasPOSTests(TestCase):
         self.assertEqual(data['clientes'][0]['nombre'], 'María López')
         self.assertEqual(data['clientes'][0]['direccion'], 'Ciudad de Guatemala')
 
+    def test_api_clientes_busca_nombre_parcial_sin_distinguir_mayusculas(self):
+        Cliente.objects.create(nombre='Julio Rene', telefono='42161234')
+        self.client.force_login(self.usuario)
+
+        for termino in ('Julio', 'julio', 'Rene', 'rene', '4216'):
+            with self.subTest(termino=termino):
+                response = self.client.get(
+                    reverse('tienda:pos_api_clientes_buscar'),
+                    {'q': termino},
+                    HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+                )
+                self.assertEqual(response.status_code, 200)
+                clientes = response.json()['clientes']
+                self.assertEqual([cliente['nombre'] for cliente in clientes], ['Julio Rene'])
+
     def test_api_clientes_crea_y_devuelve_cliente_seleccionable(self):
         self.client.force_login(self.usuario)
         payload = {

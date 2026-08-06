@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const app = document.getElementById('posApp');
   if (!app) return;
   const state = { carrito: [], productos: [], cliente: null, categoria: '', marca: '', ultimaVentaUrl: '' };
+  let ultimaBusquedaClientes = 0;
   const $ = (id) => document.getElementById(id);
   const money = (value) => `Q${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   function obtenerCSRFToken() {
@@ -132,20 +133,24 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  async function buscarClientes(query = $('buscarCliente').value) {
+  async function buscarClientes(query = '') {
+    const termino = String(query || '').trim();
+    const numeroBusqueda = ++ultimaBusquedaClientes;
     try {
-      const url = `${window.POS_URLS.buscarClientes}?q=${encodeURIComponent(query || '')}`;
-      const response = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } });
+      const url = `${window.POS_URLS.buscarClientes}?q=${encodeURIComponent(termino)}`;
+      const response = await fetch(url, { method: 'GET', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } });
       const text = await response.text();
       let data;
       try { data = JSON.parse(text); } catch (error) {
         console.error('Respuesta no JSON al buscar clientes:', text);
         throw new Error('El servidor no devolvió JSON al buscar clientes. Verifique la sesión y la URL en Network.');
       }
-      if (!response.ok || !data.ok) throw new Error(data.mensaje || 'No se pudieron cargar los clientes.');
+      if (!response.ok || !data.ok) throw new Error(data.mensaje || 'No se pudieron buscar clientes.');
+      if (numeroBusqueda !== ultimaBusquedaClientes) return;
       renderClientes(data.clientes || []);
     } catch (error) {
-      mostrarAlerta(error.message || 'No se pudieron cargar los clientes.');
+      console.error(error);
+      if (numeroBusqueda === ultimaBusquedaClientes) mostrarAlerta(error.message || 'Error al buscar clientes.');
     }
   }
 
@@ -314,7 +319,15 @@ document.addEventListener('DOMContentLoaded', () => {
   ['descuentoValor', 'descuentoTipo', 'impuestoPorcentaje', 'envioValor', 'monto_recibido'].forEach(id => $(id).addEventListener('input', calcularTotales));
   $('posSearch').addEventListener('input', () => { clearTimeout(window.posSearchTimer); window.posSearchTimer = setTimeout(cargarProductos, 250); });
   $('posSearch').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); buscarOAgregarProducto(); } });
-  $('buscarCliente').addEventListener('input', buscarClientes);
+  const inputBuscarCliente = $('buscar_cliente');
+  if (inputBuscarCliente) {
+    inputBuscarCliente.addEventListener('input', function () {
+      clearTimeout(window.buscarClientesTimer);
+      window.buscarClientesTimer = setTimeout(() => buscarClientes(this.value), 200);
+    });
+  } else {
+    console.warn('No se encontró el campo buscar_cliente');
+  }
   $('btnGuardarCliente').addEventListener('click', crearCliente);
   $('btnReiniciar').addEventListener('click', () => limpiarCarrito(true));
   $('btnNuevaVenta').addEventListener('click', () => limpiarCarrito(true));
