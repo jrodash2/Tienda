@@ -23,7 +23,7 @@ def _validar_ajustes(*, subtotal, descuento_tipo, descuento_valor, impuesto_porc
         raise ValidationError('El descuento no puede ser mayor al subtotal.')
 
 
-def crear_venta_pos(*, usuario, cliente=None, items=None, monto_pagado=Decimal('0.00'), metodo_pago='efectivo', referencia='', observaciones='', descuento_tipo='fijo', descuento_valor=Decimal('0.00'), impuesto_porcentaje=Decimal('0.00'), envio=Decimal('0.00'), tipo_pago='pendiente'):
+def crear_venta_pos(*, usuario, cliente=None, items=None, monto_pagado=Decimal('0.00'), metodo_pago='efectivo', referencia='', observaciones='', descuento_tipo='fijo', descuento_valor=Decimal('0.00'), impuesto_porcentaje=Decimal('0.00'), envio=Decimal('0.00'), tipo_pago='credito'):
     items = items or []
     if not items:
         raise ValidationError('Agregue al menos un producto a la venta.')
@@ -33,9 +33,10 @@ def crear_venta_pos(*, usuario, cliente=None, items=None, monto_pagado=Decimal('
     monto_pagado = _decimal(monto_pagado)
     if monto_pagado < 0:
         raise ValidationError('El pago no puede ser negativo.')
-    if tipo_pago not in ('completo', 'parcial', 'pendiente'):
+    if tipo_pago not in ('completo', 'parcial', 'credito', 'pendiente'):
         raise ValidationError('Tipo de pago inválido.')
-    if tipo_pago == 'pendiente':
+    # ``pendiente`` se conserva como alias para clientes antiguos del API.
+    if tipo_pago in ('credito', 'pendiente'):
         monto_pagado = Decimal('0.00')
 
     with transaction.atomic():
@@ -71,10 +72,10 @@ def crear_venta_pos(*, usuario, cliente=None, items=None, monto_pagado=Decimal('
 
         _validar_ajustes(subtotal=subtotal, descuento_tipo=descuento_tipo, descuento_valor=descuento_valor, impuesto_porcentaje=impuesto_porcentaje, envio=envio)
         total = venta.total
+        if tipo_pago == 'completo':
+            monto_pagado = total
         if monto_pagado > total:
             raise ValidationError('El pago no puede ser mayor al total de la venta.')
-        if tipo_pago == 'completo' and monto_pagado != total:
-            raise ValidationError('El pago completo debe cubrir el total exacto de la venta.')
         if tipo_pago == 'parcial' and (monto_pagado <= 0 or monto_pagado >= total):
             raise ValidationError('El pago parcial debe ser mayor que cero y menor al total.')
         if monto_pagado > 0:
@@ -84,8 +85,8 @@ def crear_venta_pos(*, usuario, cliente=None, items=None, monto_pagado=Decimal('
 
 
 def agregar_pago_venta(*, venta, usuario, monto, metodo_pago='efectivo', referencia='', observaciones=''):
-    if venta.estado == 'anulado':
-        raise ValidationError('No se pueden agregar pagos a ventas anuladas.')
+    if venta.estado in ('pagado', 'anulado'):
+        raise ValidationError('Solo se pueden agregar pagos a ventas con saldo pendiente.')
     monto = _decimal(monto)
     if monto <= 0:
         raise ValidationError('El pago debe ser mayor que cero.')

@@ -107,6 +107,8 @@
     </table>
   </div>
 
+  {% if venta.estado == 'credito' %}<div style="margin-top:12px;padding:10px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;"><strong>Venta al crédito.</strong> El saldo completo está pendiente de pago.</div>{% endif %}
+
   <div class="section-title">Pagos registrados</div>
   <table>
     <thead><tr><th>Fecha</th><th>Método</th><th>Referencia</th><th class="text-right">Monto</th></tr></thead>
@@ -114,7 +116,7 @@
       {% for pago in venta.pagos.all %}
       <tr><td>{{ pago.fecha|date:'d/m/Y H:i' }}</td><td>{{ pago.get_metodo_pago_display }}</td><td>{{ pago.referencia|default:'-' }}</td><td class="text-right">{{ pago.monto|quetzales }}</td></tr>
       {% empty %}
-      <tr><td colspan="4">No hay pagos registrados.</td></tr>
+      <tr><td colspan="4">{% if venta.estado == 'credito' %}No hay pagos registrados. Venta realizada al crédito.{% else %}No hay pagos registrados.{% endif %}</td></tr>
       {% endfor %}
     </tbody>
   </table>
