@@ -59,8 +59,10 @@
 
   <table class="summary"><tr><td>Subtotal</td><td class="text-right">{{ venta.subtotal_productos|quetzales }}</td></tr><tr><td>Descuento</td><td class="text-right">{{ venta.descuento_monto|quetzales }}</td></tr><tr><td>Impuesto</td><td class="text-right">{{ venta.impuesto_monto|quetzales }}</td></tr><tr><td>Envío</td><td class="text-right">{{ venta.envio|quetzales }}</td></tr><tr class="summary-total"><td>Total</td><td class="text-right">{{ venta.total|quetzales }}</td></tr><tr><td>Pagado</td><td class="text-right">{{ venta.total_pagado|quetzales }}</td></tr><tr><td><strong>Saldo pendiente</strong></td><td class="text-right"><strong>{{ venta.saldo_pendiente|quetzales }}</strong></td></tr></table>
 
+  {% if venta.estado == 'credito' %}<div style="margin-top:12px;padding:10px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;"><strong>Venta al crédito.</strong> El saldo completo está pendiente de pago.</div>{% endif %}
+
   <div class="section-title">Pagos registrados</div>
-  <table><thead><tr><th>Fecha</th><th>Método</th><th>Referencia</th><th class="text-right">Monto</th></tr></thead><tbody>{% for pago in venta.pagos.all %}<tr><td>{{ pago.fecha|date:'d/m/Y H:i' }}</td><td>{{ pago.get_metodo_pago_display }}</td><td>{{ pago.referencia|default:'-' }}</td><td class="text-right">{{ pago.monto|quetzales }}</td></tr>{% empty %}<tr><td colspan="4">No hay pagos registrados.</td></tr>{% endfor %}</tbody></table>
+  <table><thead><tr><th>Fecha</th><th>Método</th><th>Referencia</th><th class="text-right">Monto</th></tr></thead><tbody>{% for pago in venta.pagos.all %}<tr><td>{{ pago.fecha|date:'d/m/Y H:i' }}</td><td>{{ pago.get_metodo_pago_display }}</td><td>{{ pago.referencia|default:'-' }}</td><td class="text-right">{{ pago.monto|quetzales }}</td></tr>{% empty %}<tr><td colspan="4">{% if venta.estado == 'credito' %}No hay pagos registrados. Venta realizada al crédito.{% else %}No hay pagos registrados.{% endif %}</td></tr>{% endfor %}</tbody></table>
 
   <div class="section-title">Observaciones</div>
   <table><tr><td>{{ venta.observaciones|default:'Gracias por su compra.' }}</td></tr></table>

@@ -390,7 +390,7 @@ class Cliente(models.Model):
 
 
 class Venta(models.Model):
-    ESTADOS = [('pendiente', 'Pendiente'), ('pagado_parcial', 'Pagado parcial'), ('pagado', 'Pagado'), ('anulado', 'Anulado')]
+    ESTADOS = [('pendiente', 'Pendiente'), ('credito', 'Al crédito'), ('pagado_parcial', 'Pagado parcial'), ('pagado', 'Pagado'), ('anulado', 'Anulado')]
     ORIGENES = [('pos', 'POS'), ('tienda', 'Tienda en línea')]
     cliente = models.ForeignKey(Cliente, on_delete=models.SET_NULL, null=True, blank=True, related_name='ventas')
     origen = models.CharField(max_length=20, choices=ORIGENES, default='pos')
@@ -502,7 +502,7 @@ class Venta(models.Model):
         elif total_pagado > 0:
             self.estado = 'pagado_parcial'
         else:
-            self.estado = 'pendiente'
+            self.estado = 'credito' if total > 0 else 'pendiente'
         if commit:
             self.save(update_fields=['estado'])
         return self.estado
