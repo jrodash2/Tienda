@@ -404,6 +404,7 @@ def admin_dashboard(request):
     today = timezone.localdate()
     month_start = today.replace(day=1)
     pedidos = Pedido.objects.all()
+    ventas = list(Venta.objects.exclude(estado='anulado').prefetch_related('detalles', 'pagos'))
     return render(request, 'tienda/admin/dashboard.html', {
         'pedidos_dia': pedidos.filter(fecha_creacion__date=today).count(),
         'pendientes': pedidos.filter(estado__in=[Pedido.Estado.PENDIENTE, Pedido.Estado.RECIBIDO]).count(),
@@ -411,7 +412,11 @@ def admin_dashboard(request):
         'ventas_mes': pedidos.filter(estado_pago=Pedido.EstadoPago.CONFIRMADO, fecha_creacion__date__gte=month_start).aggregate(s=Sum('total'))['s'] or 0,
         'productos_activos': Producto.objects.filter(activo=True).count(),
         'productos_agotados': Producto.objects.filter(stock=0).count(),
-        'total_vendido': pedidos.filter(estado_pago=Pedido.EstadoPago.CONFIRMADO).aggregate(s=Sum('total'))['s'] or 0,
+        'total_vendido': sum((venta.total for venta in ventas), Decimal('0.00')),
+        'pagado_recibido': sum((venta.total_pagado for venta in ventas), Decimal('0.00')),
+        'saldo_pendiente_ventas': sum((venta.saldo_pendiente for venta in ventas), Decimal('0.00')),
+        'ganancia_bruta_ventas': sum((venta.ganancia_bruta for venta in ventas), Decimal('0.00')),
+        'ganancia_cobrada_ventas': sum((venta.ganancia_cobrada for venta in ventas), Decimal('0.00')),
         'entregados': pedidos.filter(estado=Pedido.Estado.ENTREGADO).count(),
         'cancelados': pedidos.filter(estado=Pedido.Estado.CANCELADO).count(),
         'ultimos_pedidos': pedidos.select_related('cliente')[:8],
@@ -570,7 +575,12 @@ def admin_pedido_detalle(request, pk):
 @grupo_requerido('Administrador', 'Tienda', 'Ventas')
 def admin_pagos_pendientes(request):
     pedidos = Pedido.objects.filter(Q(estado_pago=Pedido.EstadoPago.COMPROBANTE_RECIBIDO) | Q(estado=Pedido.Estado.PAGO_EN_REVISION)).select_related('cliente', 'ubicacion_recogida')
-    return render(request, 'tienda/admin/pagos/pendientes.html', {'pedidos': pedidos})
+    ventas = Venta.objects.exclude(estado='anulado').select_related('cliente').prefetch_related('detalles', 'pagos')
+    ventas_pendientes = [venta for venta in ventas if venta.saldo_pendiente > 0]
+    return render(request, 'tienda/admin/pagos/pendientes.html', {
+        'pedidos': pedidos,
+        'ventas_pendientes': ventas_pendientes,
+    })
 
 
 @login_required
@@ -669,11 +679,32 @@ def pos_api_productos(request):
 @grupo_requerido('Administrador', 'Tienda', 'Ventas')
 @require_GET
 def pos_api_clientes_buscar(request):
-    q = request.GET.get('q', '').strip()
-    clientes = Cliente.objects.all()
-    if q:
-        clientes = clientes.filter(Q(nombre__icontains=q) | Q(telefono__icontains=q) | Q(nit__icontains=q) | Q(email__icontains=q))
-    return JsonResponse({'clientes': [{'id': c.id, 'nombre': c.nombre, 'telefono': c.telefono or '', 'nit': c.nit or '', 'email': c.email or ''} for c in clientes[:20]]})
+    try:
+        q = request.GET.get('q', '').strip()
+        clientes = Cliente.objects.all().order_by('nombre')
+        if q:
+            clientes = clientes.filter(
+                Q(nombre__icontains=q) |
+                Q(telefono__icontains=q) |
+                Q(email__icontains=q) |
+                Q(nit__icontains=q) |
+                Q(dpi__icontains=q) |
+                Q(direccion__icontains=q)
+            )
+        data = [{
+            'id': cliente.id,
+            'nombre': cliente.nombre,
+            'telefono': cliente.telefono or '',
+            'email': cliente.email or '',
+            'nit': cliente.nit or '',
+            'dpi': cliente.dpi or '',
+            'direccion': cliente.direccion or '',
+            'texto': f'{cliente.nombre} - {cliente.telefono or "Sin teléfono"}',
+        } for cliente in clientes[:30]]
+        return JsonResponse({'ok': True, 'clientes': data})
+    except Exception:
+        logger.exception('Error buscando clientes desde POS')
+        return JsonResponse({'ok': False, 'clientes': [], 'mensaje': 'Error interno al buscar clientes. Verifique las migraciones y la base de datos.'}, status=500)
 
 
 @login_required
@@ -683,12 +714,28 @@ def pos_api_clientes_crear(request):
     try:
         data = json.loads(request.body.decode('utf-8') or '{}')
     except json.JSONDecodeError:
-        return JsonResponse({'ok': False, 'mensaje': 'Solicitud inválida.'}, status=400)
-    form = ClienteForm(data)
-    if form.is_valid():
+        return JsonResponse({'ok': False, 'mensaje': 'JSON inválido.'}, status=400)
+    try:
+        form = ClienteForm(data)
+        if not form.is_valid():
+            return JsonResponse({'ok': False, 'errores': form.errors.get_json_data(), 'mensaje': 'Revise los datos del cliente.'}, status=400)
         cliente = form.save()
-        return JsonResponse({'ok': True, 'cliente': {'id': cliente.id, 'nombre': cliente.nombre, 'telefono': cliente.telefono or '', 'nit': cliente.nit or '', 'email': cliente.email or ''}})
-    return JsonResponse({'ok': False, 'errores': form.errors, 'mensaje': 'Revise los datos del cliente.'}, status=400)
+        return JsonResponse({
+            'ok': True,
+            'mensaje': 'Cliente creado correctamente.',
+            'cliente': {
+                'id': cliente.id,
+                'nombre': cliente.nombre,
+                'telefono': cliente.telefono or '',
+                'email': cliente.email or '',
+                'direccion': cliente.direccion or '',
+                'nit': cliente.nit or '',
+                'dpi': cliente.dpi or '',
+            },
+        })
+    except Exception:
+        logger.exception('Error creando cliente desde POS')
+        return JsonResponse({'ok': False, 'mensaje': 'Error interno al crear cliente. Verifique las migraciones y la base de datos.'}, status=500)
 
 
 @login_required
@@ -699,11 +746,11 @@ def pos_api_ventas_crear(request):
         data = json.loads(request.body.decode('utf-8') or '{}')
         cliente = Cliente.objects.filter(pk=data.get('cliente_id')).first() if data.get('cliente_id') else None
         pago = data.get('pago') or {}
-        tipo_pago = pago.get('tipo', 'pendiente')
+        tipo_pago = pago.get('tipo') or 'credito'
         monto_pago = Decimal(str(pago.get('monto', '0') or '0'))
-        if tipo_pago not in ('completo', 'parcial', 'pendiente'):
+        if tipo_pago not in ('completo', 'parcial', 'credito', 'pendiente'):
             raise ValidationError('Tipo de pago inválido.')
-        if tipo_pago == 'pendiente':
+        if tipo_pago in ('credito', 'pendiente'):
             monto_pago = Decimal('0.00')
         venta = crear_venta_pos(
             usuario=request.user,
@@ -722,7 +769,8 @@ def pos_api_ventas_crear(request):
     except (json.JSONDecodeError, ValidationError, ValueError) as exc:
         mensaje = '; '.join(exc.messages) if hasattr(exc, 'messages') else str(exc)
         return JsonResponse({'ok': False, 'mensaje': mensaje}, status=400)
-    return JsonResponse({'ok': True, 'venta_id': venta.id, 'estado': venta.estado, 'total': f'{venta.total:.2f}', 'pagado': f'{venta.total_pagado:.2f}', 'saldo': f'{venta.saldo_pendiente:.2f}', 'comprobante_url': reverse('tienda:pos_comprobante', kwargs={'venta_id': venta.pk}), 'mensaje': 'Venta registrada correctamente'})
+    mensaje = 'Venta registrada al crédito correctamente.' if venta.estado == 'credito' else 'Venta registrada correctamente.'
+    return JsonResponse({'ok': True, 'venta_id': venta.id, 'estado': venta.estado, 'total': f'{venta.total:.2f}', 'pagado': f'{venta.total_pagado:.2f}', 'saldo': f'{venta.saldo_pendiente:.2f}', 'comprobante_url': reverse('tienda:pos_comprobante', kwargs={'venta_id': venta.pk}), 'mensaje': mensaje})
 
 
 @login_required
@@ -858,19 +906,20 @@ def pos_cotizacion_convertir_venta(request, cotizacion_id):
             venta = Venta.objects.create(
                 cliente=cotizacion.cliente,
                 origen='pos',
-                estado='pendiente',
+                estado='credito',
                 usuario=request.user,
                 descuento_tipo=cotizacion.descuento_tipo,
                 descuento_valor=cotizacion.descuento_valor,
                 impuesto_porcentaje=cotizacion.impuesto_porcentaje,
                 envio=cotizacion.envio,
-                observaciones=f'Venta generada desde cotización #{cotizacion.id}. {cotizacion.observaciones or ""}'.strip(),
+                observaciones=f'Venta al crédito generada desde cotización #{cotizacion.id}. {cotizacion.observaciones or ""}'.strip(),
             )
             for detalle in detalles:
                 producto = Producto.objects.select_for_update().get(pk=detalle.producto_id)
                 DetalleVenta.objects.create(venta=venta, producto=producto, cantidad=detalle.cantidad, precio_unitario=detalle.precio_unitario, precio_costo_unitario=detalle.precio_costo_unitario)
                 producto.stock -= detalle.cantidad
                 producto.save(update_fields=['stock', 'fecha_actualizacion'])
+            venta.actualizar_estado_por_pagos()
             cotizacion.estado = 'convertida'
             cotizacion.venta_convertida = venta
             cotizacion.save(update_fields=['estado', 'venta_convertida'])

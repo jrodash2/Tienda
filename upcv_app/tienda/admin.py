@@ -98,10 +98,14 @@ class ClienteAdmin(admin.ModelAdmin):
 
 @admin.register(Venta)
 class VentaAdmin(admin.ModelAdmin):
-    list_display = ('id', 'cliente', 'origen', 'estado', 'total', 'total_pagado', 'saldo_pendiente', 'ganancia_total', 'fecha', 'usuario')
+    list_display = ('id', 'cliente', 'origen', 'estado_calculado', 'total', 'total_pagado', 'saldo_pendiente', 'ganancia_total', 'fecha', 'usuario')
     list_filter = ('estado', 'origen', 'fecha')
     search_fields = ('cliente__nombre', 'cliente__telefono', 'cliente__nit')
     inlines = [DetalleVentaInline, PagoVentaInline]
+
+    @admin.display(description='Estado', ordering='estado')
+    def estado_calculado(self, obj):
+        return obj.estado_real_display
 
 @admin.register(DetalleVenta)
 class DetalleVentaAdmin(admin.ModelAdmin):

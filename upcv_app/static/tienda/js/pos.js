@@ -1,13 +1,36 @@
 document.addEventListener('DOMContentLoaded', () => {
+  console.log('pos.js cargado correctamente');
+  console.log('POS_URLS:', window.POS_URLS);
   const app = document.getElementById('posApp');
   if (!app) return;
   const state = { carrito: [], productos: [], cliente: null, categoria: '', marca: '', ultimaVentaUrl: '' };
+  let ultimaBusquedaClientes = 0;
+  let clientesEncontrados = [];
   const $ = (id) => document.getElementById(id);
   const money = (value) => `Q${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const csrf = () => (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+  function obtenerCSRFToken() {
+    const input = document.querySelector('[name=csrfmiddlewaretoken]');
+    if (input) return input.value;
+    const cookie = document.cookie.split('; ').find(row => row.startsWith('csrftoken='));
+    return cookie ? decodeURIComponent(cookie.split('=')[1]) : '';
+  }
+  const csrf = obtenerCSRFToken;
   const alertBox = $('posAlert');
 
+  function agregarEventoSeguro(id, evento, funcion) {
+    const elemento = $(id);
+    if (!elemento) {
+      console.warn(`No se encontró el elemento con id: ${id}`);
+      return;
+    }
+    elemento.addEventListener(evento, funcion);
+  }
+
   function mostrarAlerta(msg, tipo = 'warning') {
+    if (!alertBox) {
+      console.warn('No se encontró el contenedor #posAlert:', msg);
+      return;
+    }
     alertBox.innerHTML = `<div class="alert alert-${tipo} shadow">${msg}</div>`;
     setTimeout(() => { alertBox.innerHTML = ''; }, 3200);
   }
@@ -23,7 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const envio = Math.max(0, Number($('envioValor').value || 0));
     const impuesto = (subtotal - descuento) * impuestoPorcentaje / 100;
     const total = subtotal - descuento + impuesto + envio;
-    const pagado = Math.max(0, Number($('montoRecibido').value || 0));
+    const pagado = Math.max(0, Number($('monto_recibido').value || 0));
     return { subtotal, cantidad, descuento, impuesto, envio, total, pagado, saldo: Math.max(total - pagado, 0) };
   }
 
@@ -104,20 +127,82 @@ document.addEventListener('DOMContentLoaded', () => {
     $('clienteActualDetalle').textContent = cliente ? `${cliente.telefono || 'Sin teléfono'} ${cliente.nit ? '· NIT ' + cliente.nit : ''}` : 'Walk-in customer';
   }
 
-  async function buscarClientes() {
-    const res = await fetch(`${app.dataset.clientesUrl}?q=${encodeURIComponent($('buscarCliente').value)}`);
-    const data = await res.json();
-    $('clientesResultados').innerHTML = data.clientes.map(c => `<button type="button" class="list-group-item list-group-item-action" data-cliente='${JSON.stringify(c)}'>${c.nombre}<br><small>${c.telefono || ''} ${c.nit || ''}</small></button>`).join('');
+  function renderClientes(clientes) {
+    clientesEncontrados = clientes || [];
+    const contenedor = $('clientesResultados');
+    if (!contenedor) {
+      console.warn('No existe el contenedor clientesResultados');
+      return;
+    }
+    contenedor.replaceChildren();
+    if (!clientesEncontrados.length) {
+      contenedor.innerHTML = '<div class="text-muted p-2">No se encontraron clientes.</div>';
+      return;
+    }
+    clientesEncontrados.forEach((cliente, index) => {
+      const boton = document.createElement('button');
+      boton.type = 'button';
+      boton.className = 'list-group-item list-group-item-action';
+      boton.classList.add('cliente-item');
+      boton.dataset.index = index;
+      const nombre = document.createElement('span');
+      nombre.textContent = cliente.nombre;
+      const detalle = document.createElement('small');
+      detalle.className = 'd-block';
+      detalle.textContent = `${cliente.telefono || 'Sin teléfono'}${cliente.nit ? ` · NIT ${cliente.nit}` : ''}`;
+      boton.append(nombre, detalle);
+      contenedor.appendChild(boton);
+    });
+  }
+
+  async function buscarClientes(query = '') {
+    const termino = String(query || '').trim();
+    const numeroBusqueda = ++ultimaBusquedaClientes;
+    try {
+      if (!window.POS_URLS || !window.POS_URLS.buscarClientes) {
+        throw new Error('No está configurada la URL buscarClientes en POS_URLS.');
+      }
+      const url = `${window.POS_URLS.buscarClientes}?q=${encodeURIComponent(termino)}`;
+      console.log('Buscando clientes en:', url);
+      const response = await fetch(url, { method: 'GET', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } });
+      const text = await response.text();
+      let data;
+      try { data = JSON.parse(text); } catch (error) {
+        console.error('Respuesta no JSON al buscar clientes:', text);
+        throw new Error('El servidor no devolvió JSON al buscar clientes. Verifique la sesión y la URL en Network.');
+      }
+      if (!response.ok || !data.ok) throw new Error(data.mensaje || 'No se pudieron buscar clientes.');
+      if (numeroBusqueda !== ultimaBusquedaClientes) return;
+      renderClientes(data.clientes || []);
+    } catch (error) {
+      console.error('Error buscando clientes:', error);
+      if (numeroBusqueda === ultimaBusquedaClientes) mostrarAlerta(error.message || 'Error al buscar clientes.');
+    }
   }
 
   async function crearCliente() {
-    const payload = { nombre: $('clienteNombre').value, telefono: $('clienteTelefono').value, nit: $('clienteNit').value, email: $('clienteEmail').value, direccion: $('clienteDireccion').value };
-    const res = await fetch(app.dataset.crearClienteUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() }, body: JSON.stringify(payload) });
-    const data = await res.json();
-    if (!data.ok) return mostrarAlerta(data.mensaje || 'No se pudo crear el cliente.');
-    seleccionarCliente(data.cliente);
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCliente')).hide();
-    mostrarAlerta('Cliente creado y seleccionado.', 'success');
+    const payload = { nombre: $('cliente_nombre')?.value.trim() || '', telefono: $('cliente_telefono')?.value.trim() || '', nit: $('cliente_nit')?.value.trim() || '', dpi: $('cliente_dpi')?.value.trim() || '', email: $('cliente_email')?.value.trim() || '', direccion: $('cliente_direccion')?.value.trim() || '' };
+    if (!payload.nombre) return mostrarAlerta('Ingrese el nombre del cliente.');
+    mostrarLoading(true);
+    try {
+      const response = await fetch(window.POS_URLS.crearCliente, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': obtenerCSRFToken(), 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }, body: JSON.stringify(payload) });
+      const text = await response.text();
+      let data;
+      try { data = JSON.parse(text); } catch (error) {
+        console.error('Respuesta no JSON al crear cliente:', text);
+        throw new Error('El servidor no devolvió JSON al crear cliente. Verifique CSRF, sesión y URL en Network.');
+      }
+      if (!response.ok || !data.ok) throw new Error(data.mensaje || 'No se pudo crear el cliente.');
+      seleccionarCliente(data.cliente);
+      const modalCliente = $('modalCliente');
+      if (modalCliente) bootstrap.Modal.getOrCreateInstance(modalCliente).hide();
+      mostrarAlerta(data.mensaje || 'Cliente creado y seleccionado correctamente.', 'success');
+      await buscarClientes('');
+    } catch (error) {
+      mostrarAlerta(error.message || 'No se pudo crear el cliente.');
+    } finally {
+      mostrarLoading(false);
+    }
   }
 
   function abrirModalPago() {
@@ -126,7 +211,9 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     actualizarResumenPago();
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalPago')).show();
+    const modalPago = $('modalPago');
+    if (modalPago) bootstrap.Modal.getOrCreateInstance(modalPago).show();
+    else console.warn('No se encontró el modal #modalPago');
   }
 
   function actualizarResumenPago() {
@@ -139,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function registrarPagoCompleto() {
     const total = totales().total;
-    $('montoRecibido').value = total.toFixed(2);
+    $('monto_recibido').value = total.toFixed(2);
     guardarVentaPOS('completo');
   }
 
@@ -147,19 +234,40 @@ document.addEventListener('DOMContentLoaded', () => {
     guardarVentaPOS('parcial');
   }
 
-  async function guardarVentaPOS(tipoPago = 'pendiente') {
-    const monto = tipoPago === 'completo' ? totales().total : Number($('montoRecibido').value || 0);
-    if (!state.carrito.length) return mostrarAlerta('La venta no debe guardarse si el carrito está vacío.');
+  function registrarPagoCredito() {
+    if (!state.carrito.length) {
+      mostrarAlerta('No hay productos en la venta actual.');
+      return;
+    }
+    const montoInput = $('monto_recibido');
+    if (montoInput) montoInput.value = '0.00';
+    guardarVentaPOS('credito');
+  }
+
+  async function guardarVentaPOS(tipoPago = 'credito') {
+    let monto = Number($('monto_recibido')?.value || 0);
+    if (!state.carrito.length) return mostrarAlerta('No hay productos en la venta actual.');
     const t = totales();
-    if (tipoPago === 'parcial' && monto <= 0) return mostrarAlerta('Ingrese un monto válido para pago parcial');
+    if (tipoPago === 'completo') monto = t.total;
+    if (tipoPago === 'credito') monto = 0;
+    if (tipoPago === 'parcial' && monto <= 0) return mostrarAlerta('Ingrese un monto válido para pago parcial.');
+    if (tipoPago === 'parcial' && monto >= t.total) return mostrarAlerta('Para pagar el total use el botón de pago completo.');
     if (tipoPago === 'completo' && t.total <= 0) return mostrarAlerta('No se pudo determinar el total de la venta');
+    if (!['credito', 'completo', 'parcial'].includes(tipoPago)) return mostrarAlerta('Tipo de pago no válido.');
     if (monto < 0) return mostrarAlerta('No se permiten pagos negativos.');
     if (monto > t.total) return mostrarAlerta('El monto no puede ser mayor al saldo pendiente');
-    const payload = { cliente_id: state.cliente?.id || null, items: state.carrito.map(i => ({ producto_id: i.id, cantidad: i.cantidad })), descuento_tipo: $('descuentoTipo').value, descuento_valor: $('descuentoValor').value || '0', impuesto_porcentaje: $('impuestoPorcentaje').value || '0', envio: $('envioValor').value || '0', pago: { tipo: tipoPago, monto, metodo_pago: $('metodoPago').value, referencia: $('referenciaPago').value, observaciones: $('observacionesPago').value } };
+    const payload = { cliente_id: state.cliente?.id || null, items: state.carrito.map(i => ({ producto_id: i.id, cantidad: i.cantidad })), descuento_tipo: $('descuentoTipo').value, descuento_valor: $('descuentoValor').value || '0', impuesto_porcentaje: $('impuestoPorcentaje').value || '0', envio: $('envioValor').value || '0', pago: { tipo: tipoPago, monto: monto.toFixed(2), metodo_pago: tipoPago === 'credito' ? '' : $('metodo_pago')?.value || '', referencia: tipoPago === 'credito' ? '' : $('referencia_pago')?.value || '', observaciones: tipoPago === 'credito' ? 'Venta registrada al crédito' : $('observaciones_pago')?.value || '' } };
     mostrarLoading(true);
     try {
-      const res = await fetch(app.dataset.crearVentaUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() }, body: JSON.stringify(payload) });
-      const data = await res.json();
+      const res = await fetch(window.POS_URLS.crearVenta, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf(), 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify(payload) });
+      const responseText = await res.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (error) {
+        console.error('Respuesta no JSON del servidor:', responseText);
+        throw new Error('El servidor no devolvió JSON válido. Revisa consola, CSRF, URL o error 500.');
+      }
       if (!res.ok || !data.ok) throw new Error(data.mensaje || 'No se pudo guardar la venta.');
       state.ultimaVentaUrl = data.comprobante_url;
       $('btnComprobante').href = data.comprobante_url;
@@ -169,7 +277,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (tipoPago === 'parcial' && Number(data.saldo || 0) > 0) mostrarAlerta(`Pago parcial registrado. Saldo pendiente: ${money(data.saldo)}`, 'info');
       limpiarCarrito(false);
       limpiarFormularioPago();
-      bootstrap.Modal.getOrCreateInstance(document.getElementById('modalPago')).hide();
+      const modalPago = $('modalPago');
+      if (modalPago) bootstrap.Modal.getOrCreateInstance(modalPago).hide();
       await cargarProductos();
     } catch (error) {
       mostrarAlerta(error.message || 'Ocurrió un error al procesar el pago');
@@ -187,11 +296,11 @@ document.addEventListener('DOMContentLoaded', () => {
       descuento_valor: $('descuentoValor').value || '0',
       impuesto_porcentaje: $('impuestoPorcentaje').value || '0',
       envio: $('envioValor').value || '0',
-      observaciones: $('observacionesPago') ? $('observacionesPago').value : ''
+      observaciones: $('observaciones_pago')?.value || ''
     };
     mostrarLoading(true);
     try {
-      const res = await fetch(app.dataset.crearCotizacionUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf(), 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify(payload) });
+      const res = await fetch(window.POS_URLS.crearCotizacion, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf(), 'X-Requested-With': 'XMLHttpRequest' }, body: JSON.stringify(payload) });
       const text = await res.text();
       let data;
       try { data = JSON.parse(text); } catch (error) { console.error('Respuesta no JSON:', text); throw new Error('El servidor no devolvió JSON válido.'); }
@@ -208,19 +317,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
   function mostrarLoading(show) {
-    $('posLoading').classList.toggle('show', show);
+    const loading = $('posLoading');
+    if (loading) loading.classList.toggle('show', show);
   }
 
   function limpiarFormularioPago() {
-    $('montoRecibido').value = 0;
-    $('referenciaPago').value = '';
-    $('observacionesPago').value = '';
+    $('monto_recibido').value = 0;
+    $('referencia_pago').value = '';
+    $('observaciones_pago').value = '';
   }
 
   function limpiarCarrito(confirmar = true) {
     if (confirmar && state.carrito.length && !confirm('¿Desea reiniciar la venta actual?')) return;
     state.carrito = [];
-    $('montoRecibido').value = 0;
+    $('monto_recibido').value = 0;
     renderCarrito();
     $('posSearch').focus();
   }
@@ -232,27 +342,62 @@ document.addEventListener('DOMContentLoaded', () => {
     if (chip) { document.querySelectorAll(`[data-filter="${chip.dataset.filter}"]`).forEach(c => c.classList.remove('active')); chip.classList.add('active'); state[chip.dataset.filter] = chip.dataset.id; cargarProductos(); }
     const cartAction = e.target.dataset.action;
     if (cartAction) { const item = state.carrito.find(i => i.id === Number(e.target.dataset.id)); if (!item) return; if (cartAction === 'mas') agregarProducto(item); if (cartAction === 'menos') item.cantidad = Math.max(1, item.cantidad - 1); if (cartAction === 'quitar') state.carrito = state.carrito.filter(i => i.id !== item.id); renderCarrito(); }
-    const clienteBtn = e.target.closest('[data-cliente]');
-    if (clienteBtn) { seleccionarCliente(JSON.parse(clienteBtn.dataset.cliente)); bootstrap.Modal.getOrCreateInstance(document.getElementById('modalCliente')).hide(); }
+    const clienteBtn = e.target.closest('.cliente-item');
+    if (clienteBtn) {
+      const cliente = clientesEncontrados[Number(clienteBtn.dataset.index)];
+      if (!cliente) return;
+      seleccionarCliente(cliente);
+      const modalCliente = $('modalCliente');
+      if (modalCliente) bootstrap.Modal.getOrCreateInstance(modalCliente).hide();
+    }
   });
 
-  $('carritoItems').addEventListener('input', (e) => { if (e.target.dataset.action === 'cantidad') { const item = state.carrito.find(i => i.id === Number(e.target.dataset.id)); item.cantidad = Math.min(item.stock, Math.max(1, Number(e.target.value || 1))); renderCarrito(); } });
-  ['descuentoValor', 'descuentoTipo', 'impuestoPorcentaje', 'envioValor', 'montoRecibido'].forEach(id => $(id).addEventListener('input', calcularTotales));
-  $('posSearch').addEventListener('input', () => { clearTimeout(window.posSearchTimer); window.posSearchTimer = setTimeout(cargarProductos, 250); });
-  $('posSearch').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); buscarOAgregarProducto(); } });
-  $('buscarCliente').addEventListener('input', buscarClientes);
-  $('btnGuardarCliente').addEventListener('click', crearCliente);
-  $('btnReiniciar').addEventListener('click', () => limpiarCarrito(true));
-  $('btnNuevaVenta').addEventListener('click', () => limpiarCarrito(true));
-  $('btnMantener').addEventListener('click', () => mostrarAlerta('Venta mantenida en pantalla. Use guardar pendiente para conservarla en el sistema.', 'info'));
-  $('btnPendiente').addEventListener('click', () => guardarVentaPOS('pendiente'));
-  $('btnGuardarCotizacion').addEventListener('click', guardarComoCotizacion);
-  $('btnPagar').addEventListener('click', abrirModalPago);
-  $('btnTopPagar').addEventListener('click', abrirModalPago);
-  $('btnPagoCompleto').addEventListener('click', registrarPagoCompleto);
-  $('btnPagoParcial').addEventListener('click', registrarPagoParcial);
-  $('btnFullscreen').addEventListener('click', () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen());
-  document.addEventListener('keydown', e => { if (e.key === 'F2') { e.preventDefault(); $('posSearch').focus(); } if (e.key === 'F4') { e.preventDefault(); $('btnPagar').click(); } if (e.key === 'F8') { e.preventDefault(); limpiarCarrito(true); } });
+  function inicializarEventosClientes() {
+    agregarEventoSeguro('buscar_cliente', 'input', function () {
+      clearTimeout(window.buscarClientesTimer);
+      window.buscarClientesTimer = setTimeout(() => buscarClientes(this.value), 200);
+    });
+    agregarEventoSeguro('btnGuardarCliente', 'click', crearCliente);
+    agregarEventoSeguro('btnCliente', 'click', function () {
+      const modalCliente = $('modalCliente');
+      if (!modalCliente) {
+        console.warn('No se encontró modalCliente');
+        return;
+      }
+      bootstrap.Modal.getOrCreateInstance(modalCliente).show();
+      buscarClientes('');
+    });
+  }
+
+  function inicializarEventosPago() {
+    agregarEventoSeguro('btnPagoCompleto', 'click', registrarPagoCompleto);
+    agregarEventoSeguro('btnPagoParcial', 'click', registrarPagoParcial);
+    agregarEventoSeguro('btnPagoCredito', 'click', registrarPagoCredito);
+    agregarEventoSeguro('btnPagar', 'click', abrirModalPago);
+    agregarEventoSeguro('btnTopPagar', 'click', abrirModalPago);
+  }
+
+  function inicializarEventosPOS() {
+    agregarEventoSeguro('carritoItems', 'input', (e) => { if (e.target.dataset.action === 'cantidad') { const item = state.carrito.find(i => i.id === Number(e.target.dataset.id)); if (!item) return; item.cantidad = Math.min(item.stock, Math.max(1, Number(e.target.value || 1))); renderCarrito(); } });
+    ['descuentoValor', 'descuentoTipo', 'impuestoPorcentaje', 'envioValor', 'monto_recibido'].forEach(id => agregarEventoSeguro(id, 'input', calcularTotales));
+    agregarEventoSeguro('posSearch', 'input', () => { clearTimeout(window.posSearchTimer); window.posSearchTimer = setTimeout(cargarProductos, 250); });
+    agregarEventoSeguro('posSearch', 'keydown', e => { if (e.key === 'Enter') { e.preventDefault(); buscarOAgregarProducto(); } });
+    agregarEventoSeguro('btnReiniciar', 'click', () => limpiarCarrito(true));
+    agregarEventoSeguro('btnNuevaVenta', 'click', () => limpiarCarrito(true));
+    agregarEventoSeguro('btnMantener', 'click', () => mostrarAlerta('Venta mantenida en pantalla. Use Venta al crédito para registrarla sin pago inicial.', 'info'));
+    agregarEventoSeguro('btnPendiente', 'click', registrarPagoCredito);
+    agregarEventoSeguro('btnGuardarCotizacion', 'click', guardarComoCotizacion);
+    agregarEventoSeguro('btnFullscreen', 'click', () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen());
+    document.addEventListener('keydown', e => {
+      if (e.key === 'F2') { e.preventDefault(); $('posSearch')?.focus(); }
+      if (e.key === 'F4') { e.preventDefault(); $('btnPagar')?.click(); }
+      if (e.key === 'F8') { e.preventDefault(); limpiarCarrito(true); }
+    });
+  }
+
+  inicializarEventosClientes();
+  inicializarEventosPago();
+  inicializarEventosPOS();
 
   cargarProductos();
   buscarClientes();
@@ -260,6 +405,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.abrirModalPago = abrirModalPago;
   window.registrarPagoCompleto = registrarPagoCompleto;
   window.registrarPagoParcial = registrarPagoParcial;
+  window.registrarPagoCredito = registrarPagoCredito;
   window.guardarVentaPOS = guardarVentaPOS;
   window.guardarComoCotizacion = guardarComoCotizacion;
 });
