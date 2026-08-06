@@ -404,6 +404,7 @@ def admin_dashboard(request):
     today = timezone.localdate()
     month_start = today.replace(day=1)
     pedidos = Pedido.objects.all()
+    ventas = list(Venta.objects.exclude(estado='anulado').prefetch_related('detalles', 'pagos'))
     return render(request, 'tienda/admin/dashboard.html', {
         'pedidos_dia': pedidos.filter(fecha_creacion__date=today).count(),
         'pendientes': pedidos.filter(estado__in=[Pedido.Estado.PENDIENTE, Pedido.Estado.RECIBIDO]).count(),
@@ -411,7 +412,11 @@ def admin_dashboard(request):
         'ventas_mes': pedidos.filter(estado_pago=Pedido.EstadoPago.CONFIRMADO, fecha_creacion__date__gte=month_start).aggregate(s=Sum('total'))['s'] or 0,
         'productos_activos': Producto.objects.filter(activo=True).count(),
         'productos_agotados': Producto.objects.filter(stock=0).count(),
-        'total_vendido': pedidos.filter(estado_pago=Pedido.EstadoPago.CONFIRMADO).aggregate(s=Sum('total'))['s'] or 0,
+        'total_vendido': sum((venta.total for venta in ventas), Decimal('0.00')),
+        'pagado_recibido': sum((venta.total_pagado for venta in ventas), Decimal('0.00')),
+        'saldo_pendiente_ventas': sum((venta.saldo_pendiente for venta in ventas), Decimal('0.00')),
+        'ganancia_bruta_ventas': sum((venta.ganancia_bruta for venta in ventas), Decimal('0.00')),
+        'ganancia_cobrada_ventas': sum((venta.ganancia_cobrada for venta in ventas), Decimal('0.00')),
         'entregados': pedidos.filter(estado=Pedido.Estado.ENTREGADO).count(),
         'cancelados': pedidos.filter(estado=Pedido.Estado.CANCELADO).count(),
         'ultimos_pedidos': pedidos.select_related('cliente')[:8],
@@ -570,7 +575,12 @@ def admin_pedido_detalle(request, pk):
 @grupo_requerido('Administrador', 'Tienda', 'Ventas')
 def admin_pagos_pendientes(request):
     pedidos = Pedido.objects.filter(Q(estado_pago=Pedido.EstadoPago.COMPROBANTE_RECIBIDO) | Q(estado=Pedido.Estado.PAGO_EN_REVISION)).select_related('cliente', 'ubicacion_recogida')
-    return render(request, 'tienda/admin/pagos/pendientes.html', {'pedidos': pedidos})
+    ventas = Venta.objects.exclude(estado='anulado').select_related('cliente').prefetch_related('detalles', 'pagos')
+    ventas_pendientes = [venta for venta in ventas if venta.saldo_pendiente > 0]
+    return render(request, 'tienda/admin/pagos/pendientes.html', {
+        'pedidos': pedidos,
+        'ventas_pendientes': ventas_pendientes,
+    })
 
 
 @login_required
@@ -699,11 +709,11 @@ def pos_api_ventas_crear(request):
         data = json.loads(request.body.decode('utf-8') or '{}')
         cliente = Cliente.objects.filter(pk=data.get('cliente_id')).first() if data.get('cliente_id') else None
         pago = data.get('pago') or {}
-        tipo_pago = pago.get('tipo', 'pendiente')
+        tipo_pago = pago.get('tipo') or 'credito'
         monto_pago = Decimal(str(pago.get('monto', '0') or '0'))
-        if tipo_pago not in ('completo', 'parcial', 'pendiente'):
+        if tipo_pago not in ('completo', 'parcial', 'credito', 'pendiente'):
             raise ValidationError('Tipo de pago inválido.')
-        if tipo_pago == 'pendiente':
+        if tipo_pago in ('credito', 'pendiente'):
             monto_pago = Decimal('0.00')
         venta = crear_venta_pos(
             usuario=request.user,
@@ -858,13 +868,13 @@ def pos_cotizacion_convertir_venta(request, cotizacion_id):
             venta = Venta.objects.create(
                 cliente=cotizacion.cliente,
                 origen='pos',
-                estado='pendiente',
+                estado='credito',
                 usuario=request.user,
                 descuento_tipo=cotizacion.descuento_tipo,
                 descuento_valor=cotizacion.descuento_valor,
                 impuesto_porcentaje=cotizacion.impuesto_porcentaje,
                 envio=cotizacion.envio,
-                observaciones=f'Venta generada desde cotización #{cotizacion.id}. {cotizacion.observaciones or ""}'.strip(),
+                observaciones=f'Venta al crédito generada desde cotización #{cotizacion.id}. {cotizacion.observaciones or ""}'.strip(),
             )
             for detalle in detalles:
                 producto = Producto.objects.select_for_update().get(pk=detalle.producto_id)

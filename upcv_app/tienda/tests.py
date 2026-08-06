@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 
 from tienda.models import CategoriaProducto, Cliente, CotizacionPOS, DetalleCotizacionPOS, PagoVenta, Producto
-from tienda.services.pos_service import crear_venta_pos
+from tienda.services.pos_service import agregar_pago_venta, crear_venta_pos
 
 
 class VentaGananciasPOSTests(TestCase):
@@ -58,6 +58,45 @@ class VentaGananciasPOSTests(TestCase):
         self.assertEqual(venta.ganancia_cobrada.quantize(Decimal('0.01')), Decimal('33.33'))
         self.assertEqual(venta.saldo_pendiente, Decimal('20.00'))
         self.assertEqual(venta.estado, 'pagado_parcial')
+
+    def test_venta_credito_descuenta_stock_sin_crear_pago(self):
+        producto = self.crear_producto('80.00')
+        venta = crear_venta_pos(
+            usuario=self.usuario,
+            cliente=self.cliente,
+            items=[{'producto_id': producto.id, 'cantidad': 2}],
+            monto_pagado=Decimal('0.00'),
+            tipo_pago='credito',
+        )
+
+        producto.refresh_from_db()
+        self.assertEqual(producto.stock, 8)
+        self.assertEqual(venta.estado, 'credito')
+        self.assertEqual(venta.total, Decimal('240.00'))
+        self.assertEqual(venta.total_pagado, Decimal('0.00'))
+        self.assertEqual(venta.saldo_pendiente, Decimal('240.00'))
+        self.assertEqual(venta.ganancia_bruta, Decimal('80.00'))
+        self.assertEqual(venta.ganancia_cobrada, Decimal('0.00'))
+        self.assertFalse(PagoVenta.objects.filter(venta=venta).exists())
+
+    def test_venta_credito_pasa_a_parcial_y_pagada_con_pagos_posteriores(self):
+        producto = self.crear_producto('80.00')
+        venta = crear_venta_pos(
+            usuario=self.usuario,
+            cliente=self.cliente,
+            items=[{'producto_id': producto.id, 'cantidad': 1}],
+            tipo_pago='credito',
+        )
+
+        agregar_pago_venta(venta=venta, usuario=self.usuario, monto=Decimal('20.00'))
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, 'pagado_parcial')
+        self.assertEqual(venta.saldo_pendiente, Decimal('100.00'))
+
+        agregar_pago_venta(venta=venta, usuario=self.usuario, monto=Decimal('100.00'))
+        venta.refresh_from_db()
+        self.assertEqual(venta.estado, 'pagado')
+        self.assertEqual(venta.saldo_pendiente, Decimal('0.00'))
 
     def test_venta_sin_costo_queda_detectable_para_alerta(self):
         producto = self.crear_producto('0.00')
